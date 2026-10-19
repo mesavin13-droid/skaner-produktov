@@ -63,8 +63,12 @@ export class ProductNotFound extends Error {}
 
 /** Old image-only / nameless catalog responses must not permanently block enrichment. */
 export function needsCatalogRefresh(p: Product): boolean {
-  if (!validBarcode(p.code) || p.source === 'manual' || p.source === 'ai-food' || p.source === 'ai-package') return false;
-  const placeholder = !p.name.trim() || new RegExp('^Товар\\\\s*' + p.code + '
+  if (!validBarcode(p.code) || ['manual', 'ai-food', 'ai-package'].includes(p.source || '')) return false;
+  const name = p.name.trim();
+  const placeholder = name.length === 0 || name.toLowerCase() === ('товар ' + p.code).toLowerCase();
+  const hasNutrition = Object.values(p.nutriments).some(v => typeof v === 'number' && Number.isFinite(v));
+  return placeholder || (!p.ingredients.trim() && !hasNutrition);
+}
 
 const OFF_FIELDS = [
   'code','product_name','product_name_ru','brands','quantity','serving_size',
