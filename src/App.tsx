@@ -171,23 +171,6 @@ export default function App() {
     }
   };
 
-  const manualFromPhoto = () => {
-    const prior = photoCode
-      ? getCached(photoCode) || getHistory().find(x => x.product.code === photoCode)?.product
-      : null;
-    const fresh: Product = {
-      code: photoCode || `label-${Date.now()}`,
-      name: '', brand: '', quantity: '', ingredients: '',
-      ingredientsTags: [], allergensTags: [], tracesTags: [], additivesTags: [],
-      labelsTags: [], categoriesTags: [], ingredientsAnalysisTags: [],
-      servingSize: '', nutriments: {}, source: 'manual',
-    };
-    setOcrReviewText('');
-    setEditingProduct(prior ? {...prior} : fresh);
-    setPhotoDraft(null);
-    setIssue(null);
-  };
-
   const sendPhoto = async () => {
     if (!photoDraft || pending.current) return;
     if (offline) { setPhotoDraft(null); setIssue({ kind: 'error', text: 'Нет интернета. Откройте историю ранее просмотренных товаров.' }); return; }
@@ -238,8 +221,7 @@ export default function App() {
               <button type="button" disabled={ocrBusy} onClick={() => setPhotoDraft(null)}>Отмена</button>
               {photoDraft.mode === 'package' && <button className="ocr-primary" type="button" disabled={ocrBusy} onClick={() => void readLabel()}>
                 {ocrBusy ? 'Распознаём…' : 'Прочитать на телефоне'} <ScanLine size={16}/>
-              </button>
-              {photoDraft.mode === 'package' && <button type="button" disabled={ocrBusy} onClick={manualFromPhoto}>Заполнить по этикетке вручную</button>}
+              </button>}
               <button type="button" disabled={ocrBusy} onClick={() => void sendPhoto()}>
                 {photoDraft.mode === 'package' ? 'Анализ через ИИ' : 'Определить через ИИ'} <ArrowRight size={16}/>
               </button>
