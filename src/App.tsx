@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { BottomNav } from './components/BottomNav';
 import { CameraScanner } from './components/CameraScanner';
+import { MarkingPanel } from './components/MarkingPanel';
+import { parseMarking, type MarkingInfo } from './lib/gs1';
 import { ProductEditor } from './components/ProductEditor';
 import { ProductCard } from './components/ProductCard';
 import { ScoreRing } from './components/ScoreRing';
@@ -47,6 +49,7 @@ function SkeletonResult() {
 export default function App() {
   const [screen, setScreen] = useState<Screen>('scanner');
   const [cameraOn, setCameraOn] = useState(false);
+  const [marking, setMarking] = useState<MarkingInfo | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [history, setHistory] = useState<SavedProduct[]>(getHistory);
@@ -76,7 +79,7 @@ export default function App() {
 
   const setView = (next: Screen) => {
     request.current?.abort(); pending.current = false;
-    setCameraOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null); setEditingProduct(null);
+    setCameraOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null); setEditingProduct(null); setMarking(null);
     setScreen(next); setShowComparison(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -89,9 +92,11 @@ export default function App() {
 
   const lookup = useCallback(async (codeInput: string) => {
     if (pending.current) return;
-    const code = cleanBarcode(codeInput);
+    const parsedMarking = parseMarking(codeInput);
+    const code = parsedMarking?.gtin ?? cleanBarcode(codeInput);
     if (!validBarcode(code)) { setIssue({ kind: 'error', text: 'Введите штрихкод от 8 до 14 цифр.' }); setManualOpen(true); return; }
     setLastBarcode(code);
+    setMarking(parsedMarking);
     pending.current = true;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
@@ -153,12 +158,12 @@ export default function App() {
   return <div className="app-backdrop"><div className="app-shell">
     {!product && <header className="site-head"><div className="app-brand"><div className="brand-mark"><ScanLine size={22} strokeWidth={2.4}/></div><div><b>Сканер</b><span>продуктов</span></div></div><div className="head-actions"><div className="head-status"><span className={`pulse-dot ${offline ? 'disconnected' : ''}`} />{offline ? 'Офлайн' : 'Онлайн'}</div><button type="button" className="head-avatar" onClick={() => setView('profile')} aria-label="Открыть профиль"><UserRound size={20}/></button></div></header>}
     <main className="content-area">
-      {product ? <ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} /> : <>
+      {product ? <><ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); setMarking(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} />{marking && <div className="marking-result"><MarkingPanel marking={marking}/></div>}</> : <>
       {screen === 'scanner' && <div className="scanner-page animate-rise">
         <div className="intro-row"><div><span className="eyebrow"><Sparkles size={14} /> ПРОВЕРЯЙ ОСОЗНАННО</span><h1>Что внутри <span>продукта?</span></h1><p>Наведите камеру на штрихкод, а мы разберём состав понятным языком.</p></div></div>
         <div className="scanner-card glass-panel"><div className="scanner-topline"><span><span className="small-led"/> СКАНИРОВАНИЕ</span><span className="glass-label">EAN / UPC</span></div>
           <CameraScanner active={cameraOn} onDetected={(code) => void lookup(code)} onCancel={() => setCameraOn(false)} />
-          <div className="scanner-actions"><button className="primary-cta" type="button" onClick={() => { if (loading) return; setIssue(null); setCameraOn(!cameraOn); }}><Barcode size={21}/>{cameraOn ? 'Закрыть камеру' : 'Сканировать штрихкод'}<ArrowRight size={20}/></button>
+          <div className="scanner-actions"><button className="primary-cta" type="button" onClick={() => { if (loading) return; setIssue(null); setCameraOn(!cameraOn); }}><Barcode size={21}/>{cameraOn ? 'Закрыть камеру' : 'Сканировать код'}<ArrowRight size={20}/></button>
             <div className="scan-mini-actions"><button type="button" className="soft-action" onClick={() => { setCameraOn(false); setManualOpen(v => !v); setIssue(null); }}><ScanLine size={18}/> Ввести код</button><button type="button" className="soft-action" onClick={() => packageInput.current?.click()}><Camera size={18}/> Фото состава</button></div>
           </div>
           <div className="photo-extra"><button type="button" className="soft-action photo-food" onClick={() => foodInput.current?.click()}><Leaf size={17}/> Фото еды или фрукта</button></div>
@@ -168,6 +173,7 @@ export default function App() {
           {manualOpen && <form className="manual-form" onSubmit={e => { e.preventDefault(); void lookup(manualCode); }}><label htmlFor="barcode-input">Штрихкод с упаковки</label><div><input id="barcode-input" type="text" inputMode="numeric" autoComplete="off" value={manualCode} maxLength={18} onChange={e => setManualCode(e.target.value)} placeholder="Например, 460..."/><button type="submit" disabled={loading}>Найти <ArrowRight size={17}/></button></div></form>}
         </div>
         {issue && <div role="alert" className={`feedback ${issue.kind}`}><AlertCircle size={21}/><div><strong>{issue.kind === 'missing' ? 'Товар не найден' : 'Информация'}</strong><p>{issue.text}</p>{issue.kind === 'missing' && <><span className="feedback-code">Считан штрихкод: <b>{lastBarcode}</b></span><small>Проверьте цифры на упаковке. Если они верны, продукта пока нет в каталоге.</small><div className="feedback-actions"><button type="button" onClick={() => { setManualOpen(true); setManualCode(lastBarcode); setIssue(null); }}><ScanLine size={16}/> Проверить код</button><button type="button" onClick={() => { setEditingProduct({ code: lastBarcode, name: `Товар ${lastBarcode}`, brand: '', quantity: '', ingredients: '', ingredientsTags: [], allergensTags: [], tracesTags: [], additivesTags: [], categoriesTags: [], labelsTags: [], ingredientsAnalysisTags: [], servingSize: '', nutriments: {} }); setIssue(null); }}><Leaf size={16}/> Добавить товар</button><button type="button" onClick={() => packageInput.current?.click()}><Camera size={16}/> Фото состава</button></div></>}</div><button type="button" aria-label="Закрыть" onClick={() => setIssue(null)}><X size={18}/></button></div>}
+        {marking && <MarkingPanel marking={marking}/>}
         {loading && <SkeletonResult/>}
         <div className="feature-grid"><div className="feature-tile"><span className="feature-icon green-glow"><Leaf size={22}/></span><strong>Состав без сложностей</strong><small>Сахар, жиры, добавки и объяснения</small></div><div className="feature-tile"><span className="feature-icon purple-glow"><ShieldCheck size={22}/></span><strong>Оценка от 0 до 100</strong><small>С учётом данных о продукте</small></div></div>
         {history.length > 0 && <section className="recent-section"><div className="section-headline"><div><span className="overline">ВАШИ ПРОДУКТЫ</span><h2>Недавно смотрели</h2></div><button type="button" onClick={() => setView('history')}>Все <ChevronRight size={17}/></button></div><div className="recent-list">{history.slice(0, 3).map(({ product: p }) => <ShelfItem key={p.code} product={p} onOpen={() => openProduct(p)} />)}</div></section>}

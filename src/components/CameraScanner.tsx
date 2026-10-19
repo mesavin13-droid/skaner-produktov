@@ -1,10 +1,12 @@
 import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser';
+import { BarcodeFormat } from '@zxing/library';
+import { parseMarking } from '../lib/gs1';
 import { Aperture, Flashlight, FlashlightOff, ScanLine, ShieldCheck, VideoOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 interface Props {
   active: boolean;
-  onDetected: (barcode: string) => void;
+  onDetected: (barcodeOrMarking: string) => void;
   onCancel: () => void;
 }
 
@@ -13,7 +15,7 @@ export function CameraScanner({ active, onDetected, onCancel }: Props) {
   const controls = useRef<IScannerControls | null>(null);
   const onDetectedRef = useRef(onDetected);
   const finished = useRef(false);
-  const [message, setMessage] = useState('Наведите камеру на штрихкод');
+  const [message, setMessage] = useState('Наведите камеру на EAN или Data Matrix');
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [torch, setTorch] = useState(false);
   onDetectedRef.current = onDetected;
@@ -40,17 +42,23 @@ export function CameraScanner({ active, onDetected, onCancel }: Props) {
           video.current,
           (result, _error, currentControls) => {
             if (!result || finished.current || cancelled) return;
-            const barcode = result.getText()?.replace(/[^\d]/g, '') ?? '';
-            if (!/^\d{8,14}$/.test(barcode)) return;
+            const text = result.getText() ?? '';
+            const isDataMatrix = result.getBarcodeFormat() === BarcodeFormat.DATA_MATRIX || /^\]d[12]/.test(text) || /^\(01\)/.test(text);
+            if (isDataMatrix) {
+              if (!parseMarking(text)) {
+                setMessage('Не удалось разобрать Data Matrix. Наведите камеру ещё раз.');
+                return;
+              }
+            } else if (!/^\d{8,14}$/.test(text)) return;
             finished.current = true;
             currentControls.stop();
-            onDetectedRef.current(barcode);
+            onDetectedRef.current(text);
           },
         );
         if (cancelled || finished.current) { scannerControls.stop(); return; }
         controls.current = scannerControls;
         setTorchAvailable(typeof scannerControls.switchTorch === 'function');
-        setMessage('Поместите штрихкод внутри рамки');
+        setMessage('Наведите рамку на EAN или квадратный Data Matrix');
       } catch (err) {
         if (cancelled) return;
         const name = err instanceof Error ? err.name : '';

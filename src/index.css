@@ -1672,3 +1672,26 @@ button:focus-visible,input:focus-visible {
 .editor-reminder { font-size:11px; color:#7e85a4; line-height:1.5; }
 .editor-error { font-size:12px; color:#c14357; }
 .editor-save { display:flex; justify-content:center; align-items:center; gap:9px; padding:14px; border:0; border-radius:16px; background:linear-gradient(135deg,#86a7f3,#526ec7); color:white; font-weight:800; box-shadow:0 6px 18px #6582d466; }
+
+/* GS1 Data Matrix expiry panel: dates come from code only, never the product catalog. */
+.marking-panel { margin:14px 0; padding:17px; border:1px solid rgba(255,255,255,.95); border-radius:24px; background:linear-gradient(145deg,#fdfdff,#eaf1ff); box-shadow:7px 11px 26px #a6b5d23d; color:#334369; }
+.marking-heading { display:flex; align-items:center; gap:12px; }
+.marking-heading>svg { color:#6784da; flex:none; }
+.marking-heading h2 { font-size:18px; margin-top:3px; }
+.marking-gtin { display:flex; align-items:center; gap:10px; font-size:11px; color:#8291af; padding:12px 0; }
+.marking-gtin b { font-size:12px; color:#52688e; letter-spacing:.35px; overflow-wrap:anywhere; }
+.marking-expiry { display:flex; align-items:center; justify-content:space-between; gap:12px; border-radius:17px; background:#e2f5ed; border:1px solid #d0eadd; color:#377e65; padding:15px 13px; }
+.marking-expiry span { font-size:12px; font-weight:700; }
+.marking-expiry strong { font-size:19px; white-space:nowrap; }
+.marking-expired .marking-expiry { background:#ffeded; border-color:#f2c8c8; color:#ac484f; }
+.marking-soon .marking-expiry { background:#fff3da; border-color:#f2deae; color:#977334; }
+.marking-status { margin:10px 0; color:#5d7289; font-size:12px; font-weight:700; }
+.marking-expired .marking-status { color:#ad4851; }
+.marking-no-date { display:flex; gap:9px; align-items:center; border-radius:15px; padding:12px; background:#fff5e5; color:#966e3b; font-size:12px; line-height:1.6; }
+.marking-no-date svg { flex:none; }
+.marking-detail { margin:10px 0; color:#596b8d; font-size:12px; }
+.marking-explanation { display:flex; align-items:flex-start; gap:7px; margin:11px 0; line-height:1.65; font-size:11px; color:#7f8ba5; }
+.marking-explanation svg { flex:none; margin-top:1px; }
+.marking-external { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:750; color:#5e7fc5; }
+.marking-result { padding:0 8px; }
+@media(max-width:370px) { .marking-expiry { align-items:flex-start; flex-direction:column; } }
