@@ -10,6 +10,11 @@ const VERIFIED_FALLBACKS: Record<string, {product_name_ru: string; quantity: str
   '4660008080136': {
     product_name_ru: 'Морс клюквенный', quantity: '1 л', catalog_source: 'barcode-catalog',
     catalog_source_url: 'https://barcode-list.ru/barcode/RU/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA.htm?barcode=%D0%BA%D0%BB%D1%8E%D0%BA%D0%B2%D0%B5%D0%BD%D0%BD%D1%8B%D0%B9'
+  },
+  '4606419017033': {
+    product_name_ru: 'Сметанный продукт «Альпийская коровка», 20%',
+    quantity: '400 г', catalog_source: 'barcode-catalog',
+    catalog_source_url: 'https://barcode-list.ru/barcode/RU/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA.htm?barcode=%D0%A1%D0%BC%D0%B5%D1%82%D0%B0%D0%BD%D0%BD%D1%8B%D0%B9+%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82'
   }
 };
 function verifiedFallback(code: string, res: VercelResponse) {
