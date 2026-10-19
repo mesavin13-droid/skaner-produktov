@@ -59,7 +59,6 @@ export default function App() {
   const [manualOpen, setManualOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [issue, setIssue] = useState<{ kind: 'missing' | 'error'; text: string; code?: string } | null>(null);
-  const [lastBarcode, setLastBarcode] = useState('');
   const [offline, setOffline] = useState(() => !navigator.onLine);
   const packageInput = useRef<HTMLInputElement>(null);
   const foodInput = useRef<HTMLInputElement>(null);
@@ -95,7 +94,6 @@ export default function App() {
     const parsedMarking = parseMarking(codeInput);
     const code = parsedMarking?.gtin ?? cleanBarcode(codeInput);
     if (!validBarcode(code)) { setIssue({ kind: 'error', text: 'Введите штрихкод от 8 до 14 цифр.' }); setManualOpen(true); return; }
-    setLastBarcode(code);
     setMarking(parsedMarking);
     pending.current = true;
     request.current?.abort();
