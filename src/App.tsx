@@ -6,18 +6,15 @@ import {
 } from 'lucide-react';
 import { BottomNav } from './components/BottomNav';
 import { CameraScanner } from './components/CameraScanner';
-import { LiveLabelScanner } from './components/LiveLabelScanner';
 import { titleQueries, pickPhotoProduct, type PhotoCandidate } from './lib/photoMatch';
 import { MarkingPanel } from './components/MarkingPanel';
 import { parseMarking, type MarkingInfo } from './lib/gs1';
-import { ProductEditor } from './components/ProductEditor';
 import { ProductCard } from './components/ProductCard';
 import { ScoreRing } from './components/ScoreRing';
 import { ALLERGENS, evaluate } from './lib/evaluate';
 import { calorie100, cleanBarcode, formatValue, getProduct, needsCatalogRefresh, ProductNotFound, validBarcode } from './lib/off';
-import { analyzePhoto, makeThumbnail, type PhotoMode } from './lib/photo';
+import { makeThumbnail } from './lib/photo';
 import { readLabelOnDevice } from './lib/ocrEngine';
-import { createOcrDraft } from './lib/labelOcr';
 import { addHistory, getCached, getFavorites, getHistory, getProfile, setCached, setProfile, toggleFavorite } from './lib/storage';
 import type { Allergen, Diet, Product, Profile, SavedProduct, Screen } from './types';
 
@@ -53,28 +50,18 @@ function SkeletonResult() {
 export default function App() {
   const [screen, setScreen] = useState<Screen>('scanner');
   const [cameraOn, setCameraOn] = useState(false);
-  const [liveLabelOn, setLiveLabelOn] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoStatus, setPhotoStatus] = useState('');
   const photoAttempt = useRef(0);
   const [marking, setMarking] = useState<MarkingInfo | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [history, setHistory] = useState<SavedProduct[]>(getHistory);
   const [favorites, setFavorites] = useState<Product[]>(getFavorites);
   const [profile, changeProfile] = useState<Profile>(getProfile);
-  const [manualCode, setManualCode] = useState('');
-  const [manualOpen, setManualOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [issue, setIssue] = useState<{ kind: 'missing' | 'error'; text: string; code?: string } | null>(null);
   const [offline, setOffline] = useState(() => !navigator.onLine);
   const packageInput = useRef<HTMLInputElement>(null);
-  const foodInput = useRef<HTMLInputElement>(null);
-  const [photoDraft, setPhotoDraft] = useState<{ image: string; mode: PhotoMode } | null>(null);
-  const [photoCode, setPhotoCode] = useState('');
-  const [ocrBusy, setOcrBusy] = useState(false);
-  const [ocrStatus, setOcrStatus] = useState('');
-  const [ocrReviewText, setOcrReviewText] = useState('');
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
   const request = useRef<AbortController | null>(null);
@@ -91,13 +78,13 @@ export default function App() {
   const setView = (next: Screen) => {
     request.current?.abort(); pending.current = false; photoAttempt.current++;
     setPhotoBusy(false); setPhotoStatus('');
-    setCameraOn(false); setLiveLabelOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null); setEditingProduct(null); setMarking(null);
+    setCameraOn(false); setProduct(null); setIssue(null); setLoading(false); setMarking(null);
     setScreen(next); setShowComparison(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const openProduct = (p: Product) => {
-    setCameraOn(false); setLiveLabelOn(false); setLoading(false); setPhotoDraft(null); setEditingProduct(null); pending.current = false; setProduct(p);
+    setCameraOn(false); setLoading(false); pending.current = false; setProduct(p);
     setHistory(addHistory(p)); setScreen('scanner'); setIssue(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -106,12 +93,12 @@ export default function App() {
     if (pending.current) return;
     const parsedMarking = parseMarking(codeInput);
     const code = parsedMarking?.gtin ?? cleanBarcode(codeInput);
-    if (!validBarcode(code)) { setIssue({ kind: 'error', text: 'Введите штрихкод от 8 до 14 цифр.' }); setManualOpen(true); return; }
+    if (!validBarcode(code)) { setIssue({ kind: 'error', text: 'Не удалось считать штрихкод. Наведите камеру на код ещё раз.' }); return; }
     setMarking(parsedMarking);
     pending.current = true;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
-    setCameraOn(false); setLiveLabelOn(false); setProduct(null); setManualOpen(false); setManualCode(''); setIssue(null);
+    setCameraOn(false); setProduct(null); setIssue(null);
     setLoading(true); setScreen('scanner');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     try {
@@ -144,77 +131,11 @@ export default function App() {
     }
   }, []);
 
-  const preparePhoto = async (file: File | undefined, mode: PhotoMode) => {
-    if (!file || loading) return;
-    setCameraOn(false); setLiveLabelOn(false); setIssue(null); setLoading(true);
-    try {
-      const image = await makeThumbnail(file);
-      setPhotoDraft({ image, mode });
-    } catch (error) {
-      setIssue({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось открыть фотографию.' });
-    } finally { setLoading(false); }
-  };
-
-  const readLabel = async () => {
-    if (!photoDraft || photoDraft.mode !== 'package' || ocrBusy) return;
-    setOcrBusy(true);
-    setOcrStatus('Подготавливаем распознавание…');
-    try {
-      const result = await readLabelOnDevice(photoDraft.image, setOcrStatus);
-      const available = Boolean(result.ingredients.trim()) || Object.keys(result.nutrients).length > 0;
-      if (!available && result.rawText.trim().length < 15) throw new Error('Фото слишком размыто. Снимите таблицу БЖУ крупным планом.');
-      const stored = photoCode ? getCached(photoCode) || getHistory().find(x => x.product.code === photoCode)?.product : null;
-      const draft = createOcrDraft(result, photoCode, stored);
-      draft.aiNotes = [...result.warnings, ...(available ? [] : ['Поля не выделены автоматически: проверьте расшифровку и заполните вручную.'])].join(' ');
-      setOcrReviewText(result.rawText);
-      setPhotoDraft(null);
-      setEditingProduct(draft);
-      setIssue(null);
-    } catch (error) {
-      setIssue({kind:'error', text: error instanceof Error ? error.message : 'Не удалось прочитать этикетку.'});
-    } finally {
-      setOcrBusy(false);
-      setOcrStatus('');
-    }
-  };
-
-  const startLiveLabel = (barcode = '') => {
-    request.current?.abort();
-    pending.current = false;
-    setPhotoCode(barcode);
-    setCameraOn(false);
-    setLiveLabelOn(true);
-    setProduct(null);
-    setIssue(null);
-    setMarking(null);
-    setManualOpen(false);
-    setPhotoDraft(null);
-    setLoading(false);
-    setScreen('scanner');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const recognizedFromCamera = (result: ReturnType<typeof import('./lib/labelOcr').parseRussianLabel>) => {
-    const stored = photoCode
-      ? getCached(photoCode) || getHistory().find(x => x.product.code === photoCode)?.product
-      : null;
-    const draft = createOcrDraft(result, photoCode, stored);
-    draft.aiNotes = [
-      ...result.warnings,
-      'Считано с камеры. Обязательно сверьте значения с этикеткой перед сохранением.',
-    ].join(' ');
-    setOcrReviewText(result.rawText);
-    setLiveLabelOn(false);
-    setEditingProduct(draft);
-    setIssue(null);
-  };
-
   const scanFrontPhoto = async (file: File | undefined) => {
     if (!file || photoBusy) return;
     const attempt = ++photoAttempt.current;
     const sameAttempt = () => photoAttempt.current === attempt;
     setCameraOn(false);
-    setLiveLabelOn(false);
     setPhotoBusy(true);
     setIssue(null);
     setPhotoStatus('Распознаём название на упаковке…');
@@ -235,7 +156,7 @@ export default function App() {
         const data = await response.json() as { items?: PhotoCandidate[] };
         if (Array.isArray(data.items)) {
           for (const candidate of data.items) {
-            if (candidate.code && /^\\d{8,14}$/.test(candidate.code)) found.set(candidate.code, candidate);
+            if (candidate.code && /^\d{8,14}$/.test(candidate.code)) found.set(candidate.code, candidate);
           }
         }
         if (pickPhotoProduct(label.rawText, [...found.values()])) break;
@@ -257,25 +178,6 @@ export default function App() {
     }
   };
 
-  const sendPhoto = async () => {
-    if (!photoDraft || pending.current) return;
-    if (offline) { setPhotoDraft(null); setIssue({ kind: 'error', text: 'Нет интернета. Откройте историю ранее просмотренных товаров.' }); return; }
-    pending.current = true;
-    request.current?.abort();
-    const controller = new AbortController(); request.current = controller;
-    const { image, mode } = photoDraft;
-    setIssue(null); setLoading(true);
-    try {
-      const result = await analyzePhoto(image, mode, controller.signal);
-      setPhotoDraft(null);
-      if (!controller.signal.aborted) openProduct(result);
-    } catch (error) {
-      if (!controller.signal.aborted) setIssue({ kind: 'error', text: error instanceof Error ? error.message : 'Ошибка анализа фото.' });
-    } finally {
-      if (!controller.signal.aborted) { pending.current = false; setLoading(false); }
-    }
-  };
-
   const toggleFave = (p: Product) => setFavorites(toggleFavorite(p));
   const updateProfile = (next: Profile) => { changeProfile(next); setProfile(next); };
   const switchAllergen = (a: Allergen) => updateProfile({ ...profile, allergens: profile.allergens.includes(a) ? profile.allergens.filter(x => x !== a) : [...profile.allergens, a] });
@@ -288,7 +190,7 @@ export default function App() {
   return <div className="app-backdrop"><div className="app-shell">
     {!product && <header className="site-head"><div className="app-brand"><div className="brand-mark"><ScanLine size={22} strokeWidth={2.4}/></div><div><b>Сканер</b><span>продуктов</span></div></div><div className="head-actions"><div className="head-status"><span className={`pulse-dot ${offline ? 'disconnected' : ''}`} />{offline ? 'Офлайн' : 'Онлайн'}</div><button type="button" className="head-avatar" onClick={() => setView('profile')} aria-label="Открыть профиль"><UserRound size={20}/></button></div></header>}
     <main className="content-area">
-      {product ? <>{marking && <div className="marking-result"><MarkingPanel marking={marking}/></div>}<ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); setMarking(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} onPhotoLabel={() => startLiveLabel(product.code)} /></> : <>
+      {product ? <>{marking && <div className="marking-result"><MarkingPanel marking={marking}/></div>}<ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); setMarking(null); }} onFavorite={() => toggleFave(product)} /></> : <>
       {screen === 'scanner' && <div className="scanner-page quick-scanner animate-rise">
         <div className="quick-heading">
           <h1>Проверить продукт</h1>
@@ -311,9 +213,6 @@ export default function App() {
         </div>
         {cameraOn && <div className="quick-camera glass-panel">
           <CameraScanner active onDetected={code => void lookup(code)} onCancel={() => setCameraOn(false)}/>
-        </div>}
-        {liveLabelOn && <div className="quick-camera glass-panel">
-          <LiveLabelScanner onRecognized={recognizedFromCamera} onCancel={() => setLiveLabelOn(false)}/>
         </div>}
         {photoBusy && <div className="quick-analyzing" role="status">
           <div className="quick-analyzing-thumb"/>
@@ -340,8 +239,6 @@ export default function App() {
       </>}
     </main>
 <input ref={packageInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото товара" onChange={e => { void scanFrontPhoto(e.target.files?.[0]); e.target.value = ''; }} />
-<input ref={foodInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото готового продукта" onChange={e => { void preparePhoto(e.target.files?.[0], 'food'); e.target.value = ''; }} />
     <BottomNav screen={screen} onSelect={setView}/>
-    {editingProduct && <ProductEditor initial={editingProduct} recognizedText={ocrReviewText} onCancel={() => { setEditingProduct(null); setOcrReviewText(''); }} onSave={saved => { setCached(saved); openProduct(saved); setOcrReviewText(''); }}/>}
   </div></div>;
 }
