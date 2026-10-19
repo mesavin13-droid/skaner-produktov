@@ -1763,3 +1763,22 @@ button:focus-visible,input:focus-visible {
 .photo-confirm-actions button[disabled] { opacity:.5; cursor:not-allowed; }
 .ocr-status { padding:11px 13px; background:#eaf0ff; color:#5468a4; border-radius:12px; font-size:12px; margin:10px 0; }
 .ocr-note { display:block; color:#8690ad; line-height:1.55; font-size:11px; padding-top:8px; }
+
+
+/* Clear label reading flow on narrow iPhones. Never hide fine print in a tiny preview. */
+.photo-confirm { flex-direction:column; align-items:stretch; }
+.photo-confirm>img { display:block; width:100%; max-height:350px; height:auto; object-fit:contain; border-radius:14px; background:#e1e6f3; }
+.photo-confirm .photo-confirm-content { width:100%; }
+.photo-confirm-content b { font-size:16px; }
+.photo-confirm-content p { font-size:12px; line-height:1.65; }
+.photo-confirm-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; width:100%; }
+.photo-confirm-actions button { min-height:43px; padding:9px 11px; align-items:center; justify-content:center; border-radius:12px; }
+.photo-confirm-actions button.ocr-primary { background:linear-gradient(125deg,#c0efdf,#abdecf); color:#2e654f; font-weight:800; grid-column:1/-1; font-size:13px; }
+.photo-confirm-actions button:last-child:not(.ocr-primary) { color:#5b6e9c; background:#f3f5fe; }
+.photo-confirm-actions button[disabled] { opacity:.55; }
+.editor-transcript { border:1px solid #d1ddee; background:#f5f8ff; border-radius:13px; padding:12px; }
+.editor-transcript summary { font-size:13px; font-weight:750; color:#4f669e; cursor:pointer; }
+.editor-transcript p { font-size:11px; line-height:1.55; color:#7b869e; margin:10px 0; }
+.editor-transcript textarea { font-family:inherit; font-size:12px; line-height:1.6; min-height:110px; width:100%; border:1px solid #dce4f3; border-radius:10px; padding:10px; resize:vertical; background:#fff; color:#334361; }
+.editor-ocr-note { border-radius:12px; background:#fff7e9; color:#876b42 !important; padding:10px; line-height:1.6; }
+@media(max-width:390px){ .photo-confirm-actions { grid-template-columns:1fr; } .photo-confirm-actions button.ocr-primary { grid-column:1; } }
