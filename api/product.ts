@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getNationalCatalogProduct } from '../server/nationalCatalog';
 import { lookupUpcItemDb } from '../server/upcItemDb';
+import { lookupEanOnline } from '../server/eanOnline';
 import {
   cacheCanServeStale, cacheIsFresh, readSharedProduct, saveSharedProduct,
   type CacheSource, type CachedRecord,
@@ -137,6 +138,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const fallback = await tryNationalOrFallback(code);
   if (fallback) return saveAndSend(res, code, fallback.product, fallback.source);
+
+  // Russian barcode catalog if an authorized token is configured; no token = no request.
+  const russianIdentity = await lookupEanOnline(code);
+  if (russianIdentity) {
+    res.setHeader('Cache-Control', 'public, s-maxage=900');
+    return res.status(200).json({ status: 1, code, product: russianIdentity, incomplete: true });
+  }
 
   // Public, independent identifier lookup (100 requests/day and 6/min on free plan).
   // It does NOT give verified nutrition. Do not copy its data into our shared
