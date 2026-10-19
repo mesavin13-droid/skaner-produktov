@@ -89,7 +89,8 @@ const TTLS: Record<CacheSource, number> = {
 export async function saveSharedProduct(barcode: string, product: JsonObject, source: CacheSource): Promise<boolean> {
   const env = config();
   if (!env || !CODE.test(barcode) || !isObject(product) || !safelyMatches(barcode, product.code)) return false;
-  if (typeof (product.product_name_ru ?? product.product_name) !== 'string') return false;
+  const name = product.product_name_ru || product.product_name;
+  if (typeof name !== 'string' || !name.trim() || /^товар\\s*\\d+$/i.test(name.trim())) return false;
   const serialized = JSON.stringify(product);
   if (serialized.length > 150_000) return false;
   const now = Date.now();

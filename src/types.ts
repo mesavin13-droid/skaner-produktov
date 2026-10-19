@@ -19,6 +19,7 @@ export interface Nutriments {
 export interface Product {
   source?: 'off' | 'ai-package' | 'ai-food' | 'barcode-catalog' | 'national-catalog' | 'manual';
   sourceUrl?: string;
+  sourceNote?: string;
   cacheStatus?: 'fresh' | 'stale';
   cacheUpdatedAt?: string;
   confidence?: 'high' | 'medium' | 'low';

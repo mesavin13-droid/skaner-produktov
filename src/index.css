@@ -1750,3 +1750,10 @@ button:focus-visible,input:focus-visible {
 .stale-product-warning { display:flex; align-items:flex-start; gap:9px; background:#fff5e7; border:1px solid #edd9ba; border-radius:15px; padding:13px; margin:15px 0 4px; color:#926932; font-size:12px; line-height:1.6; }
 .stale-product-warning svg { flex:none; margin-top:2px; }
 .stale-product-warning b { display:block; color:#835520; }
+
+/* Provenance and missing-label guidance */
+.catalog-source-note { display:flex; align-items:flex-start; gap:9px; border-radius:13px; background:#fff8e6; color:#94734b; border:1px solid #eee0bf; padding:11px; margin-top:13px; font-size:11px; line-height:1.5; }
+.catalog-source-note svg { flex:none; margin-top:1px; }
+.missing-label-data { border:1px solid #d8e4f4; background:#f4f8ff; padding:14px; border-radius:17px; margin-top:14px; }
+.missing-label-data strong { display:block; color:#3d5483; font-size:13px; }
+.missing-label-data p { margin:6px 0 2px; color:#63728e; font-size:12px; line-height:1.6; }

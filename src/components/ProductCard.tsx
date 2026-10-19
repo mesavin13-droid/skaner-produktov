@@ -45,6 +45,8 @@ export function ProductCard({ product, profile, favorite, onBack, onFavorite, on
   const isPhoto = product.source === 'ai-food' || product.source === 'ai-package';
   const warnings = profileWarnings(product, profile);
   const alternative = getAlternative(product);
+  const hasNutrition = Object.values(product.nutriments).some(v => typeof v === 'number' && Number.isFinite(v));
+  const needsMoreInfo = !product.ingredients.trim() || !hasNutrition || /^Товар\\s*\\d+$/i.test(product.name);
   const nutrients: { label: string; key: keyof typeof n; accent: string }[] = [
     { label: 'Белки', key: 'proteins_100g', accent: 'mint' },
     { label: 'Жиры', key: 'fat_100g', accent: 'peach' },
@@ -72,7 +74,9 @@ export function ProductCard({ product, profile, favorite, onBack, onFavorite, on
         </span></div>}
         {rating.completeness === 'low' && <div className="notice caution"><CircleHelp size={18} /> Мало сведений о продукте. Балл не следует считать достоверным.</div>}
         {(product.source === 'barcode-catalog' || product.source === 'national-catalog') && <div className="verified-identity"><BadgeCheck size={18}/><span>Название подтверждено по штрихкоду. Если пищевая ценность или состав отсутствуют в источнике, мы не подставляем сведения о похожем товаре.</span></div>}
-        {(product.source === 'barcode-catalog' || product.source === 'national-catalog' || product.source === 'manual') && onEdit && <button className="edit-label-button" type="button" onClick={onEdit}>Добавить данные с этикетки</button>}
+        {product.sourceNote && <div className="catalog-source-note"><CircleHelp size={17}/><span>{product.sourceNote}</span></div>}
+        {needsMoreInfo && onEdit && <div className="missing-label-data"><strong>Карточка пока неполная</strong><p>Сфотографируйте данные с упаковки или заполните состав и БЖУ вручную. Отсутствующие цифры не считаются нулём.</p><button className="edit-label-button" type="button" onClick={onEdit}>Добавить данные с этикетки</button></div>}
+        {!needsMoreInfo && (product.source === 'barcode-catalog' || product.source === 'national-catalog' || product.source === 'manual') && onEdit && <button className="edit-label-button" type="button" onClick={onEdit}>Уточнить данные с этикетки</button>}
       </div>
       {isPhoto && <div className="photo-result-notice"><CircleHelp size={20}/><div><b>Распознано ИИ · {product.confidence === 'high' ? 'высокая' : product.confidence === 'medium' ? 'средняя' : 'низкая'} уверенность</b><div>{product.source === 'ai-food' ? 'Состав и точные БЖУ нельзя определить по внешнему виду.' : 'Цифры и состав могли быть прочитаны с ошибками — сверьте этикетку.'}</div>{product.aiNotes && <div>{product.aiNotes}</div>}{product.aiAllergens?.length ? <div><b>Возможные аллергены с фото: </b>{product.aiAllergens.join(', ')}. Обязательно проверьте упаковку.</div> : null}</div></div>}
       {warnings.length > 0 && <section className="alert-panel" role="alert"><ShieldAlert size={23} /><div><h3>Проверьте аллергены и ограничения</h3>{warnings.map(w => <p key={w}>{w}</p>)}<small>Информация в базе может быть неполной. Всегда читайте упаковку.</small></div></section>}

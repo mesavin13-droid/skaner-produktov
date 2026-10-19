@@ -12,7 +12,7 @@ import { ProductEditor } from './components/ProductEditor';
 import { ProductCard } from './components/ProductCard';
 import { ScoreRing } from './components/ScoreRing';
 import { ALLERGENS, evaluate } from './lib/evaluate';
-import { calorie100, cleanBarcode, formatValue, getProduct, ProductNotFound, validBarcode } from './lib/off';
+import { calorie100, cleanBarcode, formatValue, getProduct, needsCatalogRefresh, ProductNotFound, validBarcode } from './lib/off';
 import { analyzePhoto, makeThumbnail, type PhotoMode } from './lib/photo';
 import { addHistory, getCached, getFavorites, getHistory, getProfile, setCached, setProfile, toggleFavorite } from './lib/storage';
 import type { Allergen, Diet, Product, Profile, SavedProduct, Screen } from './types';
@@ -103,8 +103,9 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     try {
       const cached = getCached(code);
-      const result = cached || await getProduct(code, controller.signal);
-      if (!cached) setCached(result);
+      const shouldRefresh = cached ? needsCatalogRefresh(cached) : true;
+      const result = cached && !shouldRefresh ? cached : await getProduct(code, controller.signal);
+      if (!cached || shouldRefresh) setCached(result);
       if (!controller.signal.aborted) openProduct(result);
     } catch (err) {
       if (!controller.signal.aborted) {

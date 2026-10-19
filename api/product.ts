@@ -12,6 +12,22 @@ const CACHE_TTL = 'public, s-maxage=1800, stale-while-revalidate=3600';
 
 type ProductRow = Record<string, unknown>;
 const VERIFIED_FALLBACKS: Record<string, ProductRow> = {
+  '4607111036568': {
+    code: '4607111036568',
+    product_name_ru: 'Чебуманы с говядиной',
+    brands: 'Горячая штучка',
+    quantity: '280 г',
+    catalog_source: 'barcode-catalog',
+    catalog_source_url: 'https://sostavista.ru/tovar/goryachaya-shtuchka-chebumany-goryachaya-shtuchka-s-govyadinoi-zamorozhe',
+    catalog_note: 'Название и БЖУ приведены по независимому каталогу. Сверьте их с этикеткой вашей упаковки.',
+    ingredients_text_ru: '',
+    nutriments: {
+      'energy-kcal_100g': 270,
+      proteins_100g: 7,
+      fat_100g: 14,
+      carbohydrates_100g: 28,
+    },
+  },
   '4660008080136': {
     code: '4660008080136',
     product_name_ru: 'Морс клюквенный',
@@ -81,9 +97,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } finally { clearTimeout(timeout); }
     if (upstream.ok) {
       const data = await upstream.json() as { status?: number; product?: ProductRow };
-      if (data.status === 1 && data.product && matches(code, data.product.code) &&
-          typeof (data.product.product_name_ru ?? data.product.product_name) === 'string') {
-        return saveAndSend(res, code, data.product, 'openfoodfacts');
+      if (data.status === 1 && data.product && matches(code, data.product.code)) {
+        const raw = data.product;
+        const name = String(raw.product_name_ru || raw.product_name || '').trim();
+        const curated = VERIFIED_FALLBACKS[code];
+        if (curated) {
+          // Same GTIN: preserve the photo and any ingredients that OFF really has.
+          // The fallback contributes an independently documented identity, not guessed ingredients.
+          const merged: ProductRow = {
+            ...raw, ...curated,
+            image_url: raw.image_url,
+            image_front_url: raw.image_front_url,
+            image_front_small_url: raw.image_front_small_url,
+            ingredients_text: raw.ingredients_text || '',
+            ingredients_text_ru: raw.ingredients_text_ru || '',
+            nutriments: { ...(curated.nutriments as ProductRow || {}), ...(raw.nutriments as ProductRow || {}) },
+          };
+          if (name && !/^товар\\s*\\d+$/i.test(name)) {
+            merged.product_name_ru = raw.product_name_ru || raw.product_name;
+          }
+          return saveAndSend(res, code, merged, 'barcode-catalog');
+        }
+        if (name && !/^товар\\s*\\d+$/i.test(name)) {
+          return saveAndSend(res, code, raw, 'openfoodfacts');
+        }
+        // Partial OFF record: may contain an image but no nutrition/name.
+        // Return it to the UI but don't contaminate the shared trusted catalogue.
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(200).json({ status: 1, code, product: raw, incomplete: true });
       }
       notFound = data.status === 0;
     } else if (upstream.status === 404) {
