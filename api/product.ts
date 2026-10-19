@@ -1,54 +1,77 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getNationalCatalogProduct } from '../server/nationalCatalog';
+import {
+  cacheCanServeStale, cacheIsFresh, readSharedProduct, saveSharedProduct,
+  type CacheSource, type CachedRecord,
+} from '../server/productsCache';
 
 const FIELDS = 'code,product_name,product_name_ru,brands,quantity,serving_size,image_url,image_front_url,image_front_small_url,nutriments,ingredients_text,ingredients_text_ru,ingredients_tags,additives_tags,allergens_tags,traces_tags,nutrition_grades,nutriscore_grade,nova_group,categories_tags,labels_tags,ingredients_analysis_tags,packaging_tags';
 const BARCODE = /^\d{8,14}$/;
 const APP_CONTACT_URL = process.env.APP_CONTACT_URL || 'https://github.com/mesavin13-droid';
-const CACHE_TTL = 'public, s-maxage=3600, stale-while-revalidate=86400';
-// Exact GTIN identity independently verified. Nutrition is unknown (never inferred).
-const VERIFIED_FALLBACKS: Record<string, {product_name_ru: string; quantity: string; catalog_source: string; catalog_source_url: string}> = {
+const CACHE_TTL = 'public, s-maxage=1800, stale-while-revalidate=3600';
+
+type ProductRow = Record<string, unknown>;
+const VERIFIED_FALLBACKS: Record<string, ProductRow> = {
   '4660008080136': {
-    product_name_ru: 'Морс клюквенный', quantity: '1 л', catalog_source: 'barcode-catalog',
-    catalog_source_url: 'https://barcode-list.ru/barcode/RU/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA.htm?barcode=%D0%BA%D0%BB%D1%8E%D0%BA%D0%B2%D0%B5%D0%BD%D0%BD%D1%8B%D0%B9'
+    code: '4660008080136',
+    product_name_ru: 'Морс клюквенный',
+    quantity: '1 л', catalog_source: 'barcode-catalog',
+    catalog_source_url: 'https://barcode-list.ru/',
+    ingredients_text_ru: '', nutriments: {},
   },
   '4606419017033': {
+    code: '4606419017033',
     product_name_ru: 'Сметанный продукт «Альпийская коровка», 20%',
     quantity: '400 г', catalog_source: 'barcode-catalog',
-    catalog_source_url: 'https://barcode-list.ru/barcode/RU/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA.htm?barcode=%D0%A1%D0%BC%D0%B5%D1%82%D0%B0%D0%BD%D0%BD%D1%8B%D0%B9+%D0%BF%D1%80%D0%BE%D0%B4%D1%83%D0%BA%D1%82'
-  }
+    catalog_source_url: 'https://barcode-list.ru/',
+    ingredients_text_ru: '', nutriments: {},
+  },
 };
-function verifiedFallback(code: string, res: VercelResponse) {
-  const known = VERIFIED_FALLBACKS[code];
-  if (!known) return null;
-  res.setHeader('Cache-Control','public, s-maxage=3600, stale-while-revalidate=86400');
-  return res.status(200).json({status: 1, code, product: {
-    code, ...known, nutriments: {}, ingredients_text_ru: '', ingredients_tags: [], allergens_tags: []
-  }});
+function matches(code: string, field: unknown) {
+  return typeof field === 'string' && BARCODE.test(field) &&
+    field.replace(/^0+/, '') === code.replace(/^0+/, '');
+}
+function sendProduct(res: VercelResponse, code: string, product: ProductRow, cache?: {
+  status: 'fresh' | 'stale'; updatedAt: string; source: CacheSource;
+}) {
+  if (cache?.status === 'stale') res.setHeader('Cache-Control', 'no-store');
+  else res.setHeader('Cache-Control', CACHE_TTL);
+  return res.status(200).json({
+    status: 1, code, product,
+    ...(cache ? { cache: { status: cache.status, updated_at: cache.updatedAt, origin: cache.source } } : {}),
+  });
+}
+function sendFromShared(res: VercelResponse, code: string, cached: CachedRecord, status: 'fresh' | 'stale') {
+  return sendProduct(res, code, cached.product, {
+    status, updatedAt: cached.updated_at, source: cached.source,
+  });
+}
+async function saveAndSend(res: VercelResponse, code: string, raw: ProductRow, source: CacheSource) {
+  // Failed cache writes never prevent showing verified source data.
+  await saveSharedProduct(code, raw, source);
+  return sendProduct(res, code, raw);
+}
+async function tryNationalOrFallback(code: string): Promise<{ product: ProductRow; source: CacheSource } | null> {
+  const national = await getNationalCatalogProduct(code);
+  if (national && matches(code, national.code))
+    return { product: national as unknown as ProductRow, source: 'national-catalog' };
+  const verified = VERIFIED_FALLBACKS[code];
+  return verified ? { product: verified, source: 'barcode-catalog' } : null;
 }
 
-async function alternative(code: string, res: VercelResponse, status: 404 | 502) {
-  // Enabled only with a legitimate catalog API key configured on the server.
-  const national = await getNationalCatalogProduct(code);
-  if (national) {
-    res.setHeader('Cache-Control', CACHE_TTL);
-    return res.status(200).json({ status: 1, code, product: national });
-  }
-  const known = verifiedFallback(code, res);
-  if (known) return known;
-  if (status === 404) {
-    res.setHeader('Cache-Control', 'public, s-maxage=300');
-    return res.status(404).json({ status: 0 });
-  }
-  res.setHeader('Cache-Control', 'no-store');
-  return res.status(503).json({ error: 'Источник сведений о товарах временно недоступен', code: 'SOURCE_UNAVAILABLE' });
-}
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Только GET' });
   const code = typeof req.query.code === 'string' ? req.query.code : '';
   if (!BARCODE.test(code)) return res.status(400).json({ error: 'Некорректный штрихкод' });
+
+  // Best-effort shared catalog: the scanner remains functional with no Supabase configuration.
+  const shared = await readSharedProduct(code);
+  if (shared && cacheIsFresh(shared)) return sendFromShared(res, code, shared, 'fresh');
+
+  let notFound = false;
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    const timeout = setTimeout(() => controller.abort(), 6500);
     let upstream: Response;
     try {
       upstream = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${FIELDS}`, {
@@ -56,13 +79,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         signal: controller.signal,
       });
     } finally { clearTimeout(timeout); }
-    if (upstream.status === 404) return alternative(code, res, 404);
-    if (!upstream.ok) return alternative(code, res, 502);
-    const data = await upstream.json() as { status?: number };
-    res.setHeader('Cache-Control', CACHE_TTL);
-    if (data.status !== 1) return alternative(code, res, 404);
-    return res.status(200).json(data);
+    if (upstream.ok) {
+      const data = await upstream.json() as { status?: number; product?: ProductRow };
+      if (data.status === 1 && data.product && matches(code, data.product.code) &&
+          typeof (data.product.product_name_ru ?? data.product.product_name) === 'string') {
+        return saveAndSend(res, code, data.product, 'openfoodfacts');
+      }
+      notFound = data.status === 0;
+    } else if (upstream.status === 404) {
+      notFound = true;
+    }
   } catch {
-    return alternative(code, res, 502);
+    // Upstream connection and timeouts are handled by the fallback chain.
   }
+
+  const fallback = await tryNationalOrFallback(code);
+  if (fallback) return saveAndSend(res, code, fallback.product, fallback.source);
+
+  // If the source is down or the product was deleted, keep a previously verified
+  // record accessible for at most 30 days, clearly labeled as stale in the UI.
+  if (shared && cacheCanServeStale(shared))
+    return sendFromShared(res, code, shared, 'stale');
+
+  if (notFound) {
+    res.setHeader('Cache-Control', 'public, s-maxage=120');
+    return res.status(404).json({ status: 0, code });
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(503).json({ error: 'Источники сведений временно не ответили', code: 'SOURCE_UNAVAILABLE' });
 }
