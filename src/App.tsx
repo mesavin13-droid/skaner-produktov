@@ -108,7 +108,17 @@ export default function App() {
       if (!controller.signal.aborted) openProduct(result);
     } catch (err) {
       if (!controller.signal.aborted) {
-        setIssue({ kind: err instanceof ProductNotFound ? 'missing' : 'error', text: err instanceof Error ? err.message : 'Не удалось прочитать данные товара.', code });
+        const previous = err instanceof ProductNotFound ? null : getHistory().find(entry => entry.product.code === code);
+        if (previous) {
+          // Read-only offline fallback: do not silently present old information as current.
+          openProduct({
+            ...previous.product,
+            cacheStatus: 'stale',
+            cacheUpdatedAt: new Date(previous.scannedAt).toISOString(),
+          });
+        } else {
+          setIssue({ kind: err instanceof ProductNotFound ? 'missing' : 'error', text: err instanceof Error ? err.message : 'Не удалось прочитать данные товара.', code });
+        }
       }
     } finally {
       if (!controller.signal.aborted) { pending.current = false; setLoading(false); }
