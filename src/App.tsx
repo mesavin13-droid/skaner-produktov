@@ -14,6 +14,8 @@ import { ScoreRing } from './components/ScoreRing';
 import { ALLERGENS, evaluate } from './lib/evaluate';
 import { calorie100, cleanBarcode, formatValue, getProduct, needsCatalogRefresh, ProductNotFound, validBarcode } from './lib/off';
 import { analyzePhoto, makeThumbnail, type PhotoMode } from './lib/photo';
+import { readLabelOnDevice } from './lib/ocrEngine';
+import { createOcrDraft } from './lib/labelOcr';
 import { addHistory, getCached, getFavorites, getHistory, getProfile, setCached, setProfile, toggleFavorite } from './lib/storage';
 import type { Allergen, Diet, Product, Profile, SavedProduct, Screen } from './types';
 
@@ -63,6 +65,9 @@ export default function App() {
   const packageInput = useRef<HTMLInputElement>(null);
   const foodInput = useRef<HTMLInputElement>(null);
   const [photoDraft, setPhotoDraft] = useState<{ image: string; mode: PhotoMode } | null>(null);
+  const [photoCode, setPhotoCode] = useState('');
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState('');
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
   const request = useRef<AbortController | null>(null);
@@ -142,6 +147,28 @@ export default function App() {
     } finally { setLoading(false); }
   };
 
+  const readLabel = async () => {
+    if (!photoDraft || photoDraft.mode !== 'package' || ocrBusy) return;
+    setOcrBusy(true);
+    setOcrStatus('Подготавливаем распознавание…');
+    try {
+      const result = await readLabelOnDevice(photoDraft.image, setOcrStatus);
+      const available = Boolean(result.ingredients.trim()) || Object.keys(result.nutrients).length > 0;
+      if (!available) throw new Error('Не удалось уверенно прочитать состав или пищевую ценность. Снимите этикетку ближе и без бликов.');
+      const stored = photoCode ? getCached(photoCode) || getHistory().find(x => x.product.code === photoCode)?.product : null;
+      const draft = createOcrDraft(result, photoCode, stored);
+      draft.aiNotes = result.warnings.join(' ');
+      setPhotoDraft(null);
+      setEditingProduct(draft);
+      setIssue(null);
+    } catch (error) {
+      setIssue({kind:'error', text: error instanceof Error ? error.message : 'Не удалось прочитать этикетку.'});
+    } finally {
+      setOcrBusy(false);
+      setOcrStatus('');
+    }
+  };
+
   const sendPhoto = async () => {
     if (!photoDraft || pending.current) return;
     if (offline) { setPhotoDraft(null); setIssue({ kind: 'error', text: 'Нет интернета. Откройте историю ранее просмотренных товаров.' }); return; }
@@ -172,18 +199,34 @@ export default function App() {
   return <div className="app-backdrop"><div className="app-shell">
     {!product && <header className="site-head"><div className="app-brand"><div className="brand-mark"><ScanLine size={22} strokeWidth={2.4}/></div><div><b>Сканер</b><span>продуктов</span></div></div><div className="head-actions"><div className="head-status"><span className={`pulse-dot ${offline ? 'disconnected' : ''}`} />{offline ? 'Офлайн' : 'Онлайн'}</div><button type="button" className="head-avatar" onClick={() => setView('profile')} aria-label="Открыть профиль"><UserRound size={20}/></button></div></header>}
     <main className="content-area">
-      {product ? <>{marking && <div className="marking-result"><MarkingPanel marking={marking}/></div>}<ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); setMarking(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} /></> : <>
+      {product ? <>{marking && <div className="marking-result"><MarkingPanel marking={marking}/></div>}<ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); setMarking(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} onPhotoLabel={() => { setPhotoCode(product.code); packageInput.current?.click(); }} /></> : <>
       {screen === 'scanner' && <div className="scanner-page animate-rise">
         <div className="intro-row"><div><span className="eyebrow"><Sparkles size={14} /> ПРОВЕРЯЙ ОСОЗНАННО</span><h1>Что внутри <span>продукта?</span></h1><p>Сканируйте штрихкод или Data Matrix. Покажем данные товара и доступный срок годности.</p></div></div>
         <div className="scanner-card glass-panel"><div className="scanner-topline"><span><span className="small-led"/> СКАНИРОВАНИЕ</span><span className="glass-label">EAN / Data Matrix</span></div>
           <CameraScanner active={cameraOn} onDetected={(code) => void lookup(code)} onCancel={() => setCameraOn(false)} />
           <div className="scanner-actions"><button className="primary-cta" type="button" onClick={() => { if (loading) return; setIssue(null); setCameraOn(!cameraOn); }}><Barcode size={21}/>{cameraOn ? 'Закрыть камеру' : 'Сканировать код'}<ArrowRight size={20}/></button>
-            <div className="scan-mini-actions"><button type="button" className="soft-action" onClick={() => { setCameraOn(false); setManualOpen(v => !v); setIssue(null); }}><ScanLine size={18}/> Ввести код</button><button type="button" className="soft-action" onClick={() => packageInput.current?.click()}><Camera size={18}/> Фото состава</button></div>
+            <div className="scan-mini-actions"><button type="button" className="soft-action" onClick={() => { setCameraOn(false); setManualOpen(v => !v); setIssue(null); }}><ScanLine size={18}/> Ввести код</button><button type="button" className="soft-action" onClick={() => { setPhotoCode(''); packageInput.current?.click(); }}><Camera size={18}/> Фото состава</button></div>
           </div>
           <div className="photo-extra"><button type="button" className="soft-action photo-food" onClick={() => foodInput.current?.click()}><Leaf size={17}/> Фото еды или фрукта</button></div>
           <input ref={packageInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото упаковки или состава" onChange={e => { void preparePhoto(e.target.files?.[0], 'package'); e.target.value = ''; }} />
           <input ref={foodInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото готового продукта" onChange={e => { void preparePhoto(e.target.files?.[0], 'food'); e.target.value = ''; }} />
-          {photoDraft && <div className="photo-confirm"><img src={photoDraft.image} alt="Фото перед отправкой" /><div className="photo-confirm-content"><b>{photoDraft.mode === 'package' ? 'Анализ упаковки' : 'Оценка еды по фото'}</b><p>Снимок будет отправлен ИИ-сервису для распознавания. Результаты приблизительные; для аллергий проверяйте этикетку.</p><div className="photo-confirm-actions"><button type="button" onClick={() => setPhotoDraft(null)}>Отмена</button><button type="button" onClick={() => void sendPhoto()}>Отправить на анализ <ArrowRight size={16}/></button></div></div></div>}
+          {photoDraft && <div className="photo-confirm"><img src={photoDraft.image} alt="Фото выбранной этикетки" /><div className="photo-confirm-content">
+            <b>{photoDraft.mode === 'package' ? 'Прочитать состав и БЖУ' : 'Оценить еду на фотографии'}</b>
+            <p>{photoDraft.mode === 'package'
+              ? 'Распознавание прямо на телефоне, без отправки снимка. После этого проверьте цифры и сохраните карточку.'
+              : 'Для определения еды без этикетки нужен настроенный ИИ-сервис. Оценки приблизительные.'}</p>
+            {ocrBusy && <div className="ocr-status" role="status">{ocrStatus || 'Читаем этикетку…'}</div>}
+            <div className="photo-confirm-actions">
+              <button type="button" disabled={ocrBusy} onClick={() => setPhotoDraft(null)}>Отмена</button>
+              {photoDraft.mode === 'package' && <button className="ocr-primary" type="button" disabled={ocrBusy} onClick={() => void readLabel()}>
+                {ocrBusy ? 'Распознаём…' : 'Прочитать на телефоне'} <ScanLine size={16}/>
+              </button>}
+              <button type="button" disabled={ocrBusy} onClick={() => void sendPhoto()}>
+                {photoDraft.mode === 'package' ? 'Анализ через ИИ' : 'Определить через ИИ'} <ArrowRight size={16}/>
+              </button>
+            </div>
+            {photoDraft.mode === 'package' && <small className="ocr-note">Сфотографируйте таблицу с надписью «на 100 г/мл» и список ингредиентов. Первый запуск загрузит словарь.</small>}
+          </div></div>}
           {manualOpen && <form className="manual-form" onSubmit={e => { e.preventDefault(); void lookup(manualCode); }}><label htmlFor="barcode-input">Штрихкод с упаковки</label><div><input id="barcode-input" type="text" inputMode="numeric" autoComplete="off" value={manualCode} maxLength={18} onChange={e => setManualCode(e.target.value)} placeholder="Например, 460..."/><button type="submit" disabled={loading}>Найти <ArrowRight size={17}/></button></div></form>}
         </div>
         {issue && <div role="alert" className={`feedback ${issue.kind}`}>
@@ -200,7 +243,7 @@ export default function App() {
                 <button type="button" onClick={() => { void lookup(issue.code!); }}>
                   <ScanLine size={16}/> Повторить поиск
                 </button>
-                <button type="button" onClick={() => packageInput.current?.click()}>
+                <button type="button" onClick={() => { setPhotoCode(issue.code || ''); packageInput.current?.click(); }}>
                   <Camera size={16}/> Фото состава
                 </button>
                 <button type="button" onClick={() => {
