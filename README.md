@@ -124,3 +124,9 @@ The dedicated Supabase project is `ujuhayrbbzmsijidrfby` (eu-central-1). Databas
 **One private configuration action remains:** in the Supabase dashboard, open Project Settings → API Keys and create/copy the **secret** key (starts with `sb_secret_`). Paste it directly into Vercel → `skaner-produktov` → Settings → Environment Variables as `SUPABASE_SECRET_KEY` for Production, then redeploy. Do not paste or send the key through chats or commit it to GitHub. Alternatively, a legacy service_role JWT can be set as `SUPABASE_SERVICE_ROLE_KEY`.
 
 Only the server function uses this credential. If neither key is set, existing scanning continues without global caching.
+
+## UPCitemdb — additional independent source (2026-10)
+
+After an Open Food Facts miss, a licensed National Catalog lookup (if configured), and the small verified in-app barcode list, the backend attempts the free [UPCitemdb](https://www.upcitemdb.com/api/) lookup by exact EAN/UPC/GTIN. Free trial: up to 100 requests per day and 6/minute, shared across Vercel's egress IP. On rate limits and errors the scanner continues without inventing facts. Exact barcode match is mandatory (leading GTIN zeroes are normalized). Only product title, brand and an optional image are read; nutrition, composition and expiration are **not** inferred. UPCitemdb-derived data is not persisted to our shared Supabase catalog without confirming redistribution rights.
+
+This is an identity fallback, **not** a complete Russian ingredient database. To read exact ingredients from a missing product, scan the printed composition label using the photo pipeline once the server-side vision key is configured; otherwise use manual transcription and confirm it against the package.

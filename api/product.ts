@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getNationalCatalogProduct } from '../server/nationalCatalog';
+import { lookupUpcItemDb } from '../server/upcItemDb';
 import {
   cacheCanServeStale, cacheIsFresh, readSharedProduct, saveSharedProduct,
   type CacheSource, type CachedRecord,
@@ -85,9 +86,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (shared && cacheIsFresh(shared)) return sendFromShared(res, code, shared, 'fresh');
 
   let notFound = false;
+  let partialOpenFoodFacts: ProductRow | null = null;
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6500);
+    const timeout = setTimeout(() => controller.abort(), 4400);
     let upstream: Response;
     try {
       upstream = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${FIELDS}`, {
@@ -121,10 +123,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (name && !/^товар\\s*\\d+$/i.test(name)) {
           return saveAndSend(res, code, raw, 'openfoodfacts');
         }
-        // Partial OFF record: may contain an image but no nutrition/name.
-        // Return it to the UI but don't contaminate the shared trusted catalogue.
-        res.setHeader('Cache-Control', 'no-store');
-        return res.status(200).json({ status: 1, code, product: raw, incomplete: true });
+        // Partial OFF record: keep its image but search other catalogs for an exact GTIN.
+        // Do not cache unnamed or placeholder-only records as authoritative facts.
+        partialOpenFoodFacts = raw;
       }
       notFound = data.status === 0;
     } else if (upstream.status === 404) {
@@ -136,6 +137,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const fallback = await tryNationalOrFallback(code);
   if (fallback) return saveAndSend(res, code, fallback.product, fallback.source);
+
+  // Public, independent identifier lookup (100 requests/day and 6/min on free plan).
+  // It does NOT give verified nutrition. Do not copy its data into our shared
+  // persistent cache until its redistribution licensing is confirmed.
+  const item = await lookupUpcItemDb(code);
+  if (item) {
+    const enriched: ProductRow = {
+      ...item,
+      image_front_url: item.image_front_url || partialOpenFoodFacts?.image_front_url || partialOpenFoodFacts?.image_url,
+    };
+    res.setHeader('Cache-Control', 'public, s-maxage=900');
+    return res.status(200).json({ status: 1, code, product: enriched, incomplete: true });
+  }
+
+  // When UPCitemdb does not know the code either, an image-only OFF record
+  // remains useful as a partial product, but must be clearly labeled.
+  if (partialOpenFoodFacts) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ status: 1, code, product: partialOpenFoodFacts, incomplete: true });
+  }
 
   // If the source is down or the product was deleted, keep a previously verified
   // record accessible for at most 30 days, clearly labeled as stale in the UI.
