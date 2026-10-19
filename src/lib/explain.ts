@@ -41,7 +41,7 @@ export function explainProduct(product: Product): ClearExplanation {
   const nova4 = product.novaGroup === 4;
   const points: ClearPoint[] = [];
   const add = (title: string, explanation: string, tone: ClearPoint['tone']) => {
-    if (points.length < 5) points.push({ title, explanation, tone });
+    if (points.length < 6) points.push({ title, explanation, tone });
   };
   if (nova4) add('Сильно переработанный продукт', 'NOVA 4 означает промышленную переработку. Это не значит, что одна порция опасна, но для ежедневного рациона лучше выбирать менее переработанную еду.', 'attention');
   if (/нитрит\s+натрия|нитрит[а-я]*\s+натри|(?:^|[^a-z0-9а-я])e\s?250(?:[^a-z0-9а-я]|$)/i.test(recipe)) {
