@@ -16,7 +16,7 @@ export interface CachedRecord {
 const CODE = /^\d{8,14}$/;
 function config() {
   const base = process.env.SUPABASE_URL?.trim().replace(/\/+$/, '');
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)?.trim();
   if (!base || !key) return null;
   try {
     const u = new URL(base);
@@ -38,8 +38,12 @@ function timeoutSignal(ms: number) {
   const timer = setTimeout(() => controller.abort(), ms);
   return { signal: controller.signal, done: () => clearTimeout(timer) };
 }
-function headers(key: string) {
-  return { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' };
+function headers(key: string): Record<string, string> {
+  // Modern sb_secret keys are opaque, not JWTs; the gateway resolves their role.
+  // Only legacy service_role JWTs belong in the Authorization header.
+  return key.startsWith('sb_secret_')
+    ? { apikey: key, Accept: 'application/json' }
+    : { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' };
 }
 
 export async function readSharedProduct(barcode: string): Promise<CachedRecord | null> {

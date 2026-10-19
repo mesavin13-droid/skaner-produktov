@@ -116,3 +116,11 @@ supabase/migrations/001_init.sql  будущая схема БД
 Сведения Open Food Facts сохраняют происхождение и должны использоваться с соблюдением условий лицензии Open Database License (ODbL), включая атрибуцию. База не является проверкой безопасности или подлинности продукта.
 
 **Текущий статус:** код подготовлен, но пока не активен, так как проекта Supabase и конфиденциального ключа для него нет.
+
+### Activating with a modern Supabase secret key
+
+The dedicated Supabase project is `ujuhayrbbzmsijidrfby` (eu-central-1). Database migrations `001_init.sql` and `002_shared_product_cache.sql` have been applied; its REST URL is already configured in Vercel as `SUPABASE_URL`.
+
+**One private configuration action remains:** in the Supabase dashboard, open Project Settings → API Keys and create/copy the **secret** key (starts with `sb_secret_`). Paste it directly into Vercel → `skaner-produktov` → Settings → Environment Variables as `SUPABASE_SECRET_KEY` for Production, then redeploy. Do not paste or send the key through chats or commit it to GitHub. Alternatively, a legacy service_role JWT can be set as `SUPABASE_SERVICE_ROLE_KEY`.
+
+Only the server function uses this credential. If neither key is set, existing scanning continues without global caching.
