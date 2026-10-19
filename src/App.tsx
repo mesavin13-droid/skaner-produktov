@@ -54,6 +54,7 @@ export default function App() {
   const [manualOpen, setManualOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [issue, setIssue] = useState<{ kind: 'missing' | 'error'; text: string } | null>(null);
+  const [lastBarcode, setLastBarcode] = useState('');
   const [offline, setOffline] = useState(() => !navigator.onLine);
   const packageInput = useRef<HTMLInputElement>(null);
   const foodInput = useRef<HTMLInputElement>(null);
@@ -88,6 +89,7 @@ export default function App() {
     if (pending.current) return;
     const code = cleanBarcode(codeInput);
     if (!validBarcode(code)) { setIssue({ kind: 'error', text: 'Введите штрихкод от 8 до 14 цифр.' }); setManualOpen(true); return; }
+    setLastBarcode(code);
     pending.current = true;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
@@ -163,7 +165,7 @@ export default function App() {
           {photoDraft && <div className="photo-confirm"><img src={photoDraft.image} alt="Фото перед отправкой" /><div className="photo-confirm-content"><b>{photoDraft.mode === 'package' ? 'Анализ упаковки' : 'Оценка еды по фото'}</b><p>Снимок будет отправлен ИИ-сервису для распознавания. Результаты приблизительные; для аллергий проверяйте этикетку.</p><div className="photo-confirm-actions"><button type="button" onClick={() => setPhotoDraft(null)}>Отмена</button><button type="button" onClick={() => void sendPhoto()}>Отправить на анализ <ArrowRight size={16}/></button></div></div></div>}
           {manualOpen && <form className="manual-form" onSubmit={e => { e.preventDefault(); void lookup(manualCode); }}><label htmlFor="barcode-input">Штрихкод с упаковки</label><div><input id="barcode-input" type="text" inputMode="numeric" autoComplete="off" value={manualCode} maxLength={18} onChange={e => setManualCode(e.target.value)} placeholder="Например, 460..."/><button type="submit" disabled={loading}>Найти <ArrowRight size={17}/></button></div></form>}
         </div>
-        {issue && <div role="alert" className={`feedback ${issue.kind}`}><AlertCircle size={21}/><div><strong>{issue.kind === 'missing' ? 'Товар не найден' : 'Информация'}</strong><p>{issue.text}</p>{issue.kind === 'missing' && <><small>Попробуйте фото состава или упаковки.</small><button className="feedback-photo" type="button" onClick={() => packageInput.current?.click()}><Camera size={16}/> Сфотографировать состав</button></>}</div><button type="button" aria-label="Закрыть" onClick={() => setIssue(null)}><X size={18}/></button></div>}
+        {issue && <div role="alert" className={`feedback ${issue.kind}`}><AlertCircle size={21}/><div><strong>{issue.kind === 'missing' ? 'Товар не найден' : 'Информация'}</strong><p>{issue.text}</p>{issue.kind === 'missing' && <><span className="feedback-code">Считан штрихкод: <b>{lastBarcode}</b></span><small>Проверьте цифры на упаковке. Если они верны, продукта пока нет в каталоге.</small><div className="feedback-actions"><button type="button" onClick={() => { setManualOpen(true); setManualCode(lastBarcode); setIssue(null); }}><ScanLine size={16}/> Проверить код</button><button type="button" onClick={() => packageInput.current?.click()}><Camera size={16}/> Фото состава</button></div></>}</div><button type="button" aria-label="Закрыть" onClick={() => setIssue(null)}><X size={18}/></button></div>}
         {loading && <SkeletonResult/>}
         <div className="feature-grid"><div className="feature-tile"><span className="feature-icon green-glow"><Leaf size={22}/></span><strong>Состав без сложностей</strong><small>Сахар, жиры, добавки и объяснения</small></div><div className="feature-tile"><span className="feature-icon purple-glow"><ShieldCheck size={22}/></span><strong>Оценка от 0 до 100</strong><small>С учётом данных о продукте</small></div></div>
         {history.length > 0 && <section className="recent-section"><div className="section-headline"><div><span className="overline">ВАШИ ПРОДУКТЫ</span><h2>Недавно смотрели</h2></div><button type="button" onClick={() => setView('history')}>Все <ChevronRight size={17}/></button></div><div className="recent-list">{history.slice(0, 3).map(({ product: p }) => <ShelfItem key={p.code} product={p} onOpen={() => openProduct(p)} />)}</div></section>}
