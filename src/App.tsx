@@ -68,6 +68,7 @@ export default function App() {
   const [photoCode, setPhotoCode] = useState('');
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrStatus, setOcrStatus] = useState('');
+  const [ocrReviewText, setOcrReviewText] = useState('');
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
   const request = useRef<AbortController | null>(null);
@@ -154,10 +155,11 @@ export default function App() {
     try {
       const result = await readLabelOnDevice(photoDraft.image, setOcrStatus);
       const available = Boolean(result.ingredients.trim()) || Object.keys(result.nutrients).length > 0;
-      if (!available) throw new Error('Не удалось уверенно прочитать состав или пищевую ценность. Снимите этикетку ближе и без бликов.');
+      if (!available && result.rawText.trim().length < 15) throw new Error('Фото слишком размыто. Снимите таблицу БЖУ крупным планом.');
       const stored = photoCode ? getCached(photoCode) || getHistory().find(x => x.product.code === photoCode)?.product : null;
       const draft = createOcrDraft(result, photoCode, stored);
-      draft.aiNotes = result.warnings.join(' ');
+      draft.aiNotes = [...result.warnings, ...(available ? [] : ['Поля не выделены автоматически: проверьте расшифровку и заполните вручную.'])].join(' ');
+      setOcrReviewText(result.rawText);
       setPhotoDraft(null);
       setEditingProduct(draft);
       setIssue(null);
@@ -275,6 +277,6 @@ export default function App() {
 <input ref={packageInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото упаковки или состава" onChange={e => { void preparePhoto(e.target.files?.[0], 'package'); e.target.value = ''; }} />
 <input ref={foodInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото готового продукта" onChange={e => { void preparePhoto(e.target.files?.[0], 'food'); e.target.value = ''; }} />
     <BottomNav screen={screen} onSelect={setView}/>
-    {editingProduct && <ProductEditor initial={editingProduct} onCancel={() => setEditingProduct(null)} onSave={saved => { setCached(saved); openProduct(saved); }}/>}
+    {editingProduct && <ProductEditor initial={editingProduct} recognizedText={ocrReviewText} onCancel={() => { setEditingProduct(null); setOcrReviewText(''); }} onSave={saved => { setCached(saved); openProduct(saved); setOcrReviewText(''); }}/>}
   </div></div>;
 }
