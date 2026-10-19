@@ -236,7 +236,7 @@ export default function App() {
                   servingSize:'', nutriments:{}, source:'manual',
                 });
                 setPhotoDraft(null);
-              }}>Заполнить по этикетке вручную</button>}}
+              }}>Заполнить по этикетке вручную</button>}
               <button type="button" disabled={ocrBusy} onClick={() => void sendPhoto()}>
                 {photoDraft.mode === 'package' ? 'Анализ через ИИ' : 'Определить через ИИ'} <ArrowRight size={16}/>
               </button>
