@@ -59,28 +59,77 @@ export function normalizeProduct(raw: RawProduct, code: string): Product {
 
 export class ProductNotFound extends Error {}
 
+const OFF_FIELDS = [
+  'code','product_name','product_name_ru','brands','quantity','serving_size',
+  'image_url','image_front_url','image_front_small_url','nutriments',
+  'ingredients_text','ingredients_text_ru','ingredients_tags','additives_tags',
+  'allergens_tags','traces_tags','nutrition_grades','nutriscore_grade',
+  'nova_group','categories_tags','labels_tags','ingredients_analysis_tags',
+].join(',');
+
+type ProductReply = { status?: number; product?: RawProduct };
+
+/** OFF allows cross-origin GETs; browser fallback uses the user's own connection/IP.
+ * The browser may reject it due to CORS or a temporary rate-limit; that is handled safely.
+ */
+async function directProductLookup(code: string, signal: AbortSignal): Promise<Product | null> {
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`;
+  try {
+    const response = await fetch(url, {
+      method: 'GET', headers: { Accept: 'application/json' },
+      credentials: 'omit', signal, cache: 'default',
+    });
+    if (response.status === 404) throw new ProductNotFound('Товар не найден в Open Food Facts.');
+    if (!response.ok) return null;
+    const data = await response.json() as ProductReply;
+    if (data.status !== 1 || !data.product) throw new ProductNotFound('Товар не найден в Open Food Facts.');
+    return normalizeProduct(data.product, code);
+  } catch (error) {
+    if (error instanceof ProductNotFound) throw error;
+    if (signal.aborted) throw error;
+    return null; // Browser CORS or OFF outage. Never mislabel these as "not found".
+  }
+}
+
 export async function getProduct(code: string, signal?: AbortSignal): Promise<Product> {
   const clean = cleanBarcode(code);
   if (!validBarcode(clean)) throw new Error('Введите штрихкод от 8 до 14 цифр.');
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  // Server can time out, then the browser needs additional time for fallback.
+  const timeout = window.setTimeout(() => controller.abort(), 18000);
   const cancel = () => controller.abort();
   signal?.addEventListener('abort', cancel, { once: true });
   try {
-    const response = await fetch(`/api/product?code=${encodeURIComponent(clean)}`, { signal: controller.signal });
-    if (response.status === 404) throw new ProductNotFound('Товар пока не найден в Open Food Facts.');
-    if (!response.ok) throw new Error('Каталог продуктов временно недоступен. Попробуйте позже.');
-    const data: { status: number; product?: RawProduct } = await response.json();
-    if (data.status !== 1 || !data.product) throw new ProductNotFound('Товар пока не найден в Open Food Facts.');
-    return normalizeProduct(data.product, clean);
+    let server: Response | undefined;
+    try {
+      server = await fetch(`/api/product?code=${encodeURIComponent(clean)}`, {
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) throw error;
+      // Network/backend is unavailable; try the Open Food Facts public API.
+    }
+    if (server?.status === 404) throw new ProductNotFound('Товар пока отсутствует в доступных каталогах.');
+    if (server?.ok) {
+      const data = await server.json() as ProductReply;
+      if (data.status !== 1 || !data.product) throw new ProductNotFound('Товар пока отсутствует в доступных каталогах.');
+      return normalizeProduct(data.product, clean);
+    }
+    // Only try fallback for transient upstream / server errors.
+    // Do not silently bypass invalid client input or authorization errors.
+    if (server && server.status < 500 && server.status !== 429) {
+      throw new Error('Не получилось выполнить запрос к каталогу. Попробуйте ещё раз.');
+    }
+    const direct = await directProductLookup(clean, controller.signal);
+    if (direct) return direct;
+    throw new Error('Не удалось связаться с каталогами продуктов. Штрихкод сохранён — попробуйте ещё раз или сфотографируйте состав.');
   } catch (error) {
     if (error instanceof ProductNotFound) throw error;
     if (signal?.aborted) throw error;
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Не удалось получить ответ. Проверьте интернет и попробуйте ещё раз.');
+    if (controller.signal.aborted) {
+      throw new Error('Каталог не ответил вовремя. Попробуйте повторить поиск или сделать фото этикетки.');
     }
     if (!navigator.onLine) throw new Error('Нет интернета. Ранее просмотренные товары доступны в истории.');
-    if (error instanceof TypeError) throw new Error('Не удалось подключиться к каталогу. Проверьте интернет.');
     throw error;
   } finally {
     window.clearTimeout(timeout);
