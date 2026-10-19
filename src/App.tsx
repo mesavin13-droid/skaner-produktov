@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle, ArrowLeftRight, ArrowRight, Barcode, Bookmark, Camera, Check,
   ChevronRight, Clock3, Heart, Info, Leaf, ScanLine,
-  ShieldCheck, SlidersHorizontal, Sparkles, Trash2, UserRound, X,
+  ShieldCheck, SlidersHorizontal, Trash2, UserRound, X,
 } from 'lucide-react';
 import { BottomNav } from './components/BottomNav';
 import { CameraScanner } from './components/CameraScanner';
 import { LiveLabelScanner } from './components/LiveLabelScanner';
-import { ProductNameFinder } from './components/ProductNameFinder';
+import { titleQueries, pickPhotoProduct, type PhotoCandidate } from './lib/photoMatch';
 import { MarkingPanel } from './components/MarkingPanel';
 import { parseMarking, type MarkingInfo } from './lib/gs1';
 import { ProductEditor } from './components/ProductEditor';
@@ -54,7 +54,9 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('scanner');
   const [cameraOn, setCameraOn] = useState(false);
   const [liveLabelOn, setLiveLabelOn] = useState(false);
-  const [nameFinderOn, setNameFinderOn] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoStatus, setPhotoStatus] = useState('');
+  const photoAttempt = useRef(0);
   const [marking, setMarking] = useState<MarkingInfo | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -87,14 +89,15 @@ export default function App() {
   }, []);
 
   const setView = (next: Screen) => {
-    request.current?.abort(); pending.current = false;
-    setCameraOn(false); setLiveLabelOn(false); setNameFinderOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null); setEditingProduct(null); setMarking(null);
+    request.current?.abort(); pending.current = false; photoAttempt.current++;
+    setPhotoBusy(false); setPhotoStatus('');
+    setCameraOn(false); setLiveLabelOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null); setEditingProduct(null); setMarking(null);
     setScreen(next); setShowComparison(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const openProduct = (p: Product) => {
-    setCameraOn(false); setLiveLabelOn(false); setNameFinderOn(false); setLoading(false); setPhotoDraft(null); setEditingProduct(null); pending.current = false; setProduct(p);
+    setCameraOn(false); setLiveLabelOn(false); setLoading(false); setPhotoDraft(null); setEditingProduct(null); pending.current = false; setProduct(p);
     setHistory(addHistory(p)); setScreen('scanner'); setIssue(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -108,7 +111,7 @@ export default function App() {
     pending.current = true;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
-    setCameraOn(false); setLiveLabelOn(false); setNameFinderOn(false); setProduct(null); setManualOpen(false); setManualCode(''); setIssue(null);
+    setCameraOn(false); setLiveLabelOn(false); setProduct(null); setManualOpen(false); setManualCode(''); setIssue(null);
     setLoading(true); setScreen('scanner');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     try {
@@ -143,7 +146,7 @@ export default function App() {
 
   const preparePhoto = async (file: File | undefined, mode: PhotoMode) => {
     if (!file || loading) return;
-    setCameraOn(false); setLiveLabelOn(false); setNameFinderOn(false); setIssue(null); setLoading(true);
+    setCameraOn(false); setLiveLabelOn(false); setIssue(null); setLoading(true);
     try {
       const image = await makeThumbnail(file);
       setPhotoDraft({ image, mode });
@@ -181,7 +184,6 @@ export default function App() {
     setPhotoCode(barcode);
     setCameraOn(false);
     setLiveLabelOn(true);
-    setNameFinderOn(false);
     setProduct(null);
     setIssue(null);
     setMarking(null);
@@ -207,19 +209,52 @@ export default function App() {
     setIssue(null);
   };
 
-  const startNameFinder = () => {
-    request.current?.abort();
-    pending.current = false;
+  const scanFrontPhoto = async (file: File | undefined) => {
+    if (!file || photoBusy) return;
+    const attempt = ++photoAttempt.current;
+    const sameAttempt = () => photoAttempt.current === attempt;
     setCameraOn(false);
     setLiveLabelOn(false);
-    setNameFinderOn(true);
-    setProduct(null);
-    setPhotoDraft(null);
+    setPhotoBusy(true);
     setIssue(null);
-    setLoading(false);
-    setManualOpen(false);
-    setScreen('scanner');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setPhotoStatus('Распознаём название на упаковке…');
+    try {
+      const image = await makeThumbnail(file);
+      const label = await readLabelOnDevice(image, message => {
+        if (sameAttempt()) setPhotoStatus(message);
+      });
+      if (!sameAttempt()) return;
+      const queries = titleQueries(label.rawText);
+      if (!queries.length) throw new Error('Название не удалось прочитать. Попробуйте снять упаковку ближе.');
+      setPhotoStatus('Находим продукт и проверяем данные…');
+      const found = new Map<string, PhotoCandidate>();
+      for (const query of queries) {
+        if (!sameAttempt()) return;
+        const response = await fetch('/api/search-products?q=' + encodeURIComponent(query));
+        if (!response.ok) continue;
+        const data = await response.json() as { items?: PhotoCandidate[] };
+        if (Array.isArray(data.items)) {
+          for (const candidate of data.items) {
+            if (candidate.code && /^\\d{8,14}$/.test(candidate.code)) found.set(candidate.code, candidate);
+          }
+        }
+        if (pickPhotoProduct(label.rawText, [...found.values()])) break;
+      }
+      if (!sameAttempt()) return;
+      const result = pickPhotoProduct(label.rawText, [...found.values()]);
+      if (!result) {
+        throw new Error('Не удалось надёжно определить именно этот товар. Попробуйте другое фото или сканируйте штрихкод.');
+      }
+      setPhotoBusy(false);
+      setPhotoStatus('');
+      void lookup(result.code);
+    } catch (error) {
+      if (sameAttempt()) {
+        setIssue({ kind: 'error', text: error instanceof Error ? error.message : 'Не удалось распознать товар.' });
+      }
+    } finally {
+      if (sameAttempt()) { setPhotoBusy(false); setPhotoStatus(''); }
+    }
   };
 
   const sendPhoto = async () => {
@@ -254,83 +289,57 @@ export default function App() {
     {!product && <header className="site-head"><div className="app-brand"><div className="brand-mark"><ScanLine size={22} strokeWidth={2.4}/></div><div><b>Сканер</b><span>продуктов</span></div></div><div className="head-actions"><div className="head-status"><span className={`pulse-dot ${offline ? 'disconnected' : ''}`} />{offline ? 'Офлайн' : 'Онлайн'}</div><button type="button" className="head-avatar" onClick={() => setView('profile')} aria-label="Открыть профиль"><UserRound size={20}/></button></div></header>}
     <main className="content-area">
       {product ? <>{marking && <div className="marking-result"><MarkingPanel marking={marking}/></div>}<ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); setMarking(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} onPhotoLabel={() => startLiveLabel(product.code)} /></> : <>
-      {screen === 'scanner' && (nameFinderOn
-        ? <ProductNameFinder onCancel={() => setNameFinderOn(false)} onSelect={item => { setNameFinderOn(false); void lookup(item.code); }}/>
-        : <div className="scanner-page animate-rise">
-        <div className="intro-row"><div><span className="eyebrow"><Sparkles size={14} /> ПРОВЕРЯЙ ОСОЗНАННО</span><h1>Что внутри <span>продукта?</span></h1><p>Сканируйте штрихкод или Data Matrix. Покажем данные товара и доступный срок годности.</p></div></div>
-        <div className="scanner-card glass-panel"><div className="scanner-topline"><span><span className="small-led"/> СКАНИРОВАНИЕ</span><span className="glass-label">EAN / Data Matrix</span></div>
-          {liveLabelOn ? <LiveLabelScanner onRecognized={recognizedFromCamera} onCancel={() => setLiveLabelOn(false)}/> : <>
-          <CameraScanner active={cameraOn} onDetected={(code) => void lookup(code)} onCancel={() => setCameraOn(false)} />
-          <div className="scanner-actions"><button className="primary-cta" type="button" onClick={() => { if (loading) return; setIssue(null); setCameraOn(!cameraOn); }}><Barcode size={21}/>{cameraOn ? 'Закрыть камеру' : 'Сканировать код'}<ArrowRight size={20}/></button>
-            <button type="button" className="name-search-cta" onClick={startNameFinder}><Camera size={21}/> Фото названия — найти продукт <ArrowRight size={19}/></button>
-            <div className="scan-mini-actions"><button type="button" className="soft-action" onClick={() => { setCameraOn(false); setManualOpen(v => !v); setIssue(null); }}><ScanLine size={18}/> Ввести код</button><button type="button" className="soft-action" onClick={() => startLiveLabel()}><Camera size={18}/> Камера состава</button></div>
-          </div>
-          <div className="photo-extra"><button type="button" className="soft-action photo-food" onClick={() => { setPhotoCode(''); packageInput.current?.click(); }}><Camera size={17}/> Фото этикетки</button><button type="button" className="soft-action photo-food" onClick={() => foodInput.current?.click()}><Leaf size={17}/> Фото еды</button></div>
-          </>}
-          {photoDraft && <div className="photo-confirm"><img src={photoDraft.image} alt="Фото выбранной этикетки" /><div className="photo-confirm-content">
-            <b>{photoDraft.mode === 'package' ? 'Прочитать состав и БЖУ' : 'Оценить еду на фотографии'}</b>
-            <p>{photoDraft.mode === 'package'
-              ? 'Распознавание прямо на телефоне, без отправки снимка. После этого проверьте цифры и сохраните карточку.'
-              : 'Для определения еды без этикетки нужен настроенный ИИ-сервис. Оценки приблизительные.'}</p>
-            {ocrBusy && <div className="ocr-status" role="status">{ocrStatus || 'Читаем этикетку…'}</div>}
-            <div className="photo-confirm-actions">
-              <button type="button" disabled={ocrBusy} onClick={() => setPhotoDraft(null)}>Отмена</button>
-              {photoDraft.mode === 'package' && <button className="ocr-primary" type="button" disabled={ocrBusy} onClick={() => void readLabel()}>
-                {ocrBusy ? 'Распознаём…' : 'Прочитать на телефоне'} <ScanLine size={16}/>
-              </button>}
-              <button type="button" disabled={ocrBusy} onClick={() => void sendPhoto()}>
-                {photoDraft.mode === 'package' ? 'Анализ через ИИ' : 'Определить через ИИ'} <ArrowRight size={16}/>
-              </button>
-            </div>
-            {photoDraft.mode === 'package' && <small className="ocr-note">Сфотографируйте таблицу с надписью «на 100 г/мл» и список ингредиентов. Первый запуск загрузит словарь.</small>}
-          </div></div>}
-          {manualOpen && <form className="manual-form" onSubmit={e => { e.preventDefault(); void lookup(manualCode); }}><label htmlFor="barcode-input">Штрихкод с упаковки</label><div><input id="barcode-input" type="text" inputMode="numeric" autoComplete="off" value={manualCode} maxLength={18} onChange={e => setManualCode(e.target.value)} placeholder="Например, 460..."/><button type="submit" disabled={loading}>Найти <ArrowRight size={17}/></button></div></form>}
+      {screen === 'scanner' && <div className="scanner-page quick-scanner animate-rise">
+        <div className="quick-heading">
+          <h1>Проверить продукт</h1>
+          <p>Наведи камеру или сделай фото. Остальное сделаем сами.</p>
         </div>
-        {issue && <div role="alert" className={`feedback ${issue.kind}`}>
-          <AlertCircle size={21}/>
-          <div>
-            <strong>{issue.kind === 'missing' ? 'Товар не найден' : issue.code ? 'Не получилось получить товар' : 'Информация'}</strong>
+        <div className="quick-actions">
+          <button className="quick-action quick-barcode" type="button"
+            disabled={loading || photoBusy}
+            onClick={() => { setIssue(null); setCameraOn(v => !v); }}>
+            <span className="quick-action-icon"><Barcode size={28}/></span>
+            <span className="quick-action-label"><strong>Сканировать</strong><small>Штрихкод или Data Matrix</small></span>
+            <ArrowRight size={23}/>
+          </button>
+          <button className="quick-action quick-photo" type="button"
+            disabled={loading || photoBusy} onClick={() => packageInput.current?.click()}>
+            <span className="quick-action-icon"><Camera size={28}/></span>
+            <span className="quick-action-label"><strong>Сфотографировать</strong><small>Упаковку с названием</small></span>
+            <ArrowRight size={23}/>
+          </button>
+        </div>
+        {cameraOn && <div className="quick-camera glass-panel">
+          <CameraScanner active onDetected={code => void lookup(code)} onCancel={() => setCameraOn(false)}/>
+        </div>}
+        {liveLabelOn && <div className="quick-camera glass-panel">
+          <LiveLabelScanner onRecognized={recognizedFromCamera} onCancel={() => setLiveLabelOn(false)}/>
+        </div>}
+        {photoBusy && <div className="quick-analyzing" role="status">
+          <div className="quick-analyzing-thumb"/>
+          <div className="quick-analyzing-lines"><strong>{photoStatus || 'Проверяем продукт…'}</strong>
+            <div className="shine"/><div className="shine"/></div>
+        </div>}
+        {issue && <div role="alert" className="quick-error">
+          <AlertCircle size={22}/>
+          <div><strong>{issue.kind === 'missing' ? 'Не нашли проверенные сведения' : 'Не получилось проверить товар'}</strong>
             <p>{issue.text}</p>
-            {issue.code && <span className="feedback-code">Считан штрихкод: <b>{issue.code}</b></span>}
-            {issue.code && <>
-              <small>{issue.kind === 'missing'
-                ? 'В доступных каталогах этого товара пока нет. Можете заполнить карточку по этикетке.'
-                : 'Это ошибка получения данных, а не признак отсутствия товара в базе.'}</small>
-              <div className="feedback-actions">
-                <button type="button" onClick={() => { void lookup(issue.code!); }}>
-                  <ScanLine size={16}/> Повторить поиск
-                </button>
-                <button type="button" onClick={() => startLiveLabel(issue.code || '')}>
-                  <Camera size={16}/> Камера состава
-                </button>
-                <button type="button" onClick={() => {
-                  setEditingProduct({
-                    code: issue.code!, name: `Товар ${issue.code}`, brand: '', quantity: '',
-                    ingredients: '', ingredientsTags: [], allergensTags: [], tracesTags: [],
-                    additivesTags: [], categoriesTags: [], labelsTags: [],
-                    ingredientsAnalysisTags: [], servingSize: '', nutriments: {},
-                  });
-                  setIssue(null);
-                }}>
-                  <Leaf size={16}/> Добавить вручную
-                </button>
-              </div>
-            </>}
+            {issue.code && <small>Штрихкод: {issue.code}</small>}
+            <button type="button" onClick={() => { setIssue(null); packageInput.current?.click(); }}>
+              <Camera size={17}/> Попробовать фото
+            </button>
           </div>
-          <button type="button" aria-label="Закрыть" onClick={() => setIssue(null)}><X size={18}/></button>
         </div>}
         {marking && <MarkingPanel marking={marking}/>}
         {loading && <SkeletonResult/>}
-        <div className="feature-grid"><div className="feature-tile"><span className="feature-icon green-glow"><Leaf size={22}/></span><strong>Состав без сложностей</strong><small>Сахар, жиры, добавки и объяснения</small></div><div className="feature-tile"><span className="feature-icon purple-glow"><ShieldCheck size={22}/></span><strong>Оценка от 0 до 100</strong><small>С учётом данных о продукте</small></div></div>
-        {history.length > 0 && <section className="recent-section"><div className="section-headline"><div><span className="overline">ВАШИ ПРОДУКТЫ</span><h2>Недавно смотрели</h2></div><button type="button" onClick={() => setView('history')}>Все <ChevronRight size={17}/></button></div><div className="recent-list">{history.slice(0, 3).map(({ product: p }) => <ShelfItem key={p.code} product={p} onOpen={() => openProduct(p)} />)}</div></section>}
-        <div className="quiet-disclaimer"><Info size={15}/> Оценка ориентировочная и не заменяет совет врача.</div>
-      </div>)}
+        <p className="quick-footer">Оценка ориентировочная и не заменяет совет врача.</p>
+      </div>}
       {screen === 'history' && <div className="secondary-page animate-rise"><div className="page-title"><span className="eyebrow"><Clock3 size={14}/> СОХРАНЕНО НА УСТРОЙСТВЕ</span><h1>История <span>сканов</span></h1><p>Последние 50 проверок доступны даже без интернета.</p></div>{history.length ? <><div className="list-heading"><b>Просмотренные товары</b><small>{history.length}</small></div><div className="shelf-list">{history.map(({ product: p }) => <ShelfItem key={p.code} product={p} onOpen={() => openProduct(p)}/>)}</div><button type="button" className="delete-history" onClick={() => { if (confirm('Очистить историю проверок?')) { localStorage.removeItem('skaner-products-history-v1'); setHistory([]); } }}><Trash2 size={17}/> Очистить историю</button></> : <div className="empty-card"><div className="empty-symbol"><Clock3 size={42}/></div><h2>Здесь пока пусто</h2><p>Отсканируйте товар — и его карточка появится в истории.</p><button type="button" className="empty-button" onClick={() => setView('scanner')}>Открыть сканер <ArrowRight size={17}/></button></div>}</div>}
       {screen === 'favorites' && <div className="secondary-page animate-rise"><div className="page-title"><span className="eyebrow"><Heart size={14}/> ВАША ПОДБОРКА</span><h1>Любимые <span>продукты</span></h1><p>Сохраняйте товары и сравнивайте состав двух вариантов.</p></div>{favorites.length ? <><div className="list-heading"><b>Избранное</b><small>{favorites.length} товаров</small></div><div className="shelf-list">{favorites.map(p => <ShelfItem key={p.code} product={p} onOpen={() => openProduct(p)} selected={compareIds.includes(p.code)} comparison onCompare={() => toggleCompare(p.code)} />)}</div>{compareIds.length > 0 && <div className="compare-dock"><span>Выбрано: {compareIds.length} из 2</span><button type="button" disabled={compareIds.length !== 2} onClick={() => setShowComparison(true)}>Сравнить <ArrowLeftRight size={18}/></button></div>}{showComparison && compareProducts.length === 2 && <div className="comparison-card glass-panel"><div className="section-headline"><h2>Сравнение</h2><button type="button" onClick={() => setShowComparison(false)} aria-label="Скрыть сравнение"><X size={20}/></button></div><div className="compare-grid">{compareProducts.map(p => { const rating = evaluate(p); return <div className="compare-column" key={p.code}><strong>{p.name}</strong><div className="compare-circle"><ScoreRing rating={rating} size={116}/></div><small>{rating.completeness === 'low' ? 'Мало данных' : rating.title}</small><div className="compare-stat">Ккал / 100 г <b>{formatValue(calorie100(p.nutriments), 0)}</b></div><div className="compare-stat">Сахар / 100 г <b>{formatValue(p.nutriments.sugars_100g ?? null)} г</b></div><div className="compare-stat">Соль / 100 г <b>{formatValue(p.nutriments.salt_100g ?? null)} г</b></div><div className="compare-stat">NOVA <b>{p.novaGroup ?? '—'}</b></div></div>; })}</div><p className="small-note">Индекс ориентировочный. Сравнивайте также порции и полный состав.</p></div>}</> : <div className="empty-card"><div className="empty-symbol"><Bookmark size={42}/></div><h2>Пока нет избранного</h2><p>На карточке товара нажмите на закладку, чтобы сохранить его сюда.</p><button type="button" className="empty-button" onClick={() => setView('scanner')}>Проверить продукт <ArrowRight size={17}/></button></div>}</div>}
       {screen === 'profile' && <div className="secondary-page animate-rise"><div className="page-title"><span className="eyebrow"><SlidersHorizontal size={14}/> ЛИЧНЫЕ НАСТРОЙКИ</span><h1>Мой <span>профиль</span></h1><p>Укажите ограничения, чтобы видеть дополнительные предупреждения.</p></div><div className="profile-hero"><span className="profile-icon"><UserRound size={28}/></span><div><strong>Ваш рацион</strong><span>Настройки хранятся только на этом устройстве</span></div><ShieldCheck size={21}/></div><section className="glass-panel profile-panel"><div className="section-heading"><div><span className="overline">ВАЖНО ЗНАТЬ</span><h2>Аллергены</h2></div></div><p className="small-note">Отметьте компоненты, которые вам нельзя. Проверяйте сведения по упаковке: каталог может быть неполным.</p><div className="allergens-grid">{ALLERGENS.map(a => <button type="button" key={a.id} aria-pressed={profile.allergens.includes(a.id)} className={`allergen-chip ${profile.allergens.includes(a.id) ? 'picked' : ''}`} onClick={() => switchAllergen(a.id)}>{profile.allergens.includes(a.id) ? <Check size={15}/> : <span className="empty-check"/>}{a.label}</button>)}</div></section><section className="glass-panel profile-panel"><div className="section-heading"><div><span className="overline">ПРЕДПОЧТЕНИЯ</span><h2>Питание</h2></div></div><div className="diet-options">{DIETS.map(option => <label key={option.value} className={`diet-option ${profile.diet === option.value ? 'active' : ''}`}><input type="radio" name="diet" value={option.value} checked={profile.diet === option.value} onChange={() => updateProfile({ ...profile, diet: option.value })}/><div><strong>{option.label}</strong><span>{option.description}</span></div><span className="diet-indicator">{profile.diet === option.value && <Check size={14}/>}</span></label>)}</div></section><section className="glass-panel profile-panel"><div className="section-heading"><div><span className="overline">ДЛЯ СПРАВКИ</span><h2>Калории в день</h2></div></div><div className="calorie-input-row"><input type="number" inputMode="numeric" aria-label="Калории в день" min={500} max={10000} step={50} value={profile.calories} onChange={e => { const val = Number(e.target.value); if (Number.isFinite(val)) updateProfile({ ...profile, calories: val }); }}/><span>ккал / день</span></div><p className="small-note">Индивидуальную норму лучше определять со специалистом. В MVP она не влияет на индекс состава.</p></section><div className="quiet-disclaimer"><Info size={16}/> Оценка ориентировочная и не заменяет совет врача.</div></div>}
       </>}
     </main>
-<input ref={packageInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото упаковки или состава" onChange={e => { void preparePhoto(e.target.files?.[0], 'package'); e.target.value = ''; }} />
+<input ref={packageInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото товара" onChange={e => { void scanFrontPhoto(e.target.files?.[0]); e.target.value = ''; }} />
 <input ref={foodInput} type="file" accept="image/*" capture="environment" className="hidden-photo-input" aria-label="Фото готового продукта" onChange={e => { void preparePhoto(e.target.files?.[0], 'food'); e.target.value = ''; }} />
     <BottomNav screen={screen} onSelect={setView}/>
     {editingProduct && <ProductEditor initial={editingProduct} recognizedText={ocrReviewText} onCancel={() => { setEditingProduct(null); setOcrReviewText(''); }} onSave={saved => { setCached(saved); openProduct(saved); setOcrReviewText(''); }}/>}
