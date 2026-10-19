@@ -15,7 +15,7 @@ function ingredientMarkup(text: string) {
   );
 }
 
-interface Props { product: Product; profile: Profile; favorite: boolean; onBack: () => void; onFavorite: () => void; onEdit?: () => void; }
+interface Props { product: Product; profile: Profile; favorite: boolean; onBack: () => void; onFavorite: () => void; onEdit?: () => void; onPhotoLabel?: () => void; }
 function getAlternative(product: Product): string {
   const category = product.categoriesTags.join(' ').toLowerCase();
   const sugar = number100(product.nutriments, 'sugars_100g');
@@ -27,7 +27,7 @@ function getAlternative(product: Product): string {
   return 'Посмотрите аналогичный продукт с меньшим количеством сахара, соли и насыщенных жиров. Обратите внимание на размер порции.';
 }
 
-export function ProductCard({ product, profile, favorite, onBack, onFavorite, onEdit }: Props) {
+export function ProductCard({ product, profile, favorite, onBack, onFavorite, onEdit, onPhotoLabel }: Props) {
   const rating = evaluate(product);
   const plain = explainProduct(product);
   const [showAllReasons, setShowAllReasons] = useState(false);
@@ -75,7 +75,8 @@ export function ProductCard({ product, profile, favorite, onBack, onFavorite, on
         {rating.completeness === 'low' && <div className="notice caution"><CircleHelp size={18} /> Мало сведений о продукте. Балл не следует считать достоверным.</div>}
         {(product.source === 'barcode-catalog' || product.source === 'national-catalog') && <div className="verified-identity"><BadgeCheck size={18}/><span>Название подтверждено по штрихкоду. Если пищевая ценность или состав отсутствуют в источнике, мы не подставляем сведения о похожем товаре.</span></div>}
         {product.sourceNote && <div className="catalog-source-note"><CircleHelp size={17}/><span>{product.sourceNote}</span></div>}
-        {needsMoreInfo && onEdit && <div className="missing-label-data"><strong>Карточка пока неполная</strong><p>Сфотографируйте данные с упаковки или заполните состав и БЖУ вручную. Отсутствующие цифры не считаются нулём.</p><button className="edit-label-button" type="button" onClick={onEdit}>Добавить данные с этикетки</button></div>}
+        {needsMoreInfo && onEdit && <div className="missing-label-data"><strong>Карточка пока неполная</strong><p>Сфотографируйте данные с упаковки или заполните состав и БЖУ вручную. Отсутствующие цифры не считаются нулём.</p>{onPhotoLabel && <button className="edit-label-button" type="button" onClick={onPhotoLabel}>Сфотографировать состав и БЖУ</button>}
+        <button className="edit-label-button" type="button" onClick={onEdit}>Ввести данные вручную</button></div>}
         {!needsMoreInfo && (product.source === 'barcode-catalog' || product.source === 'national-catalog' || product.source === 'ean-online' || product.source === 'upcitemdb' || product.source === 'manual') && onEdit && <button className="edit-label-button" type="button" onClick={onEdit}>Уточнить данные с этикетки</button>}
       </div>
       {isPhoto && <div className="photo-result-notice"><CircleHelp size={20}/><div><b>Распознано ИИ · {product.confidence === 'high' ? 'высокая' : product.confidence === 'medium' ? 'средняя' : 'низкая'} уверенность</b><div>{product.source === 'ai-food' ? 'Состав и точные БЖУ нельзя определить по внешнему виду.' : 'Цифры и состав могли быть прочитаны с ошибками — сверьте этикетку.'}</div>{product.aiNotes && <div>{product.aiNotes}</div>}{product.aiAllergens?.length ? <div><b>Возможные аллергены с фото: </b>{product.aiAllergens.join(', ')}. Обязательно проверьте упаковку.</div> : null}</div></div>}
