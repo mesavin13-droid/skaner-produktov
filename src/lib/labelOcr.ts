@@ -5,6 +5,8 @@ export interface LabelRead {
   nutrients: Nutriments;
   hasBasis100: boolean;
   warnings: string[];
+  /** OCR transcription for user review, never uploaded automatically. */
+  rawText: string;
 }
 const num=(input: string): number|null=>{
   const x=Number(input.replace(',','.').replace(/\s/g,''));
@@ -51,9 +53,9 @@ export function parseRussianLabel(raw:string): LabelRead {
     // Avoid the OCR capturing the entire package as ingredients.
     if(ingredients.length>1400){ingredients=ingredients.slice(0,1400);warnings.push('Состав очень длинный: проверьте, где он заканчивается.');}
   }
-  if(!Object.keys(nutrients).length)warnings.push('Пищевая ценность не распознана уверенно. При необходимости введите её вручную.');
+  if(!Object.keys(nutrients).length)warnings.push('Таблица БЖУ не распознана уверенно. Проверьте текст распознавания ниже и при необходимости заполните поля вручную.');
   if(!ingredients)warnings.push('Состав не найден в тексте. Проверьте снимок.');
-  return {ingredients,nutrients,hasBasis100:basis,warnings};
+  return {ingredients,nutrients,hasBasis100:basis,warnings,rawText:text};
 }
 export function createOcrDraft(ocr:LabelRead,code:string,previous?:Product|null):Product {
   const valid=/^\d{8,14}$/.test(code);
