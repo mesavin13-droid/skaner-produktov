@@ -31,7 +31,13 @@ interface CacheItem { product: Product; time: number; }
 export function getCached(code: string): Product | null {
   const cached = read<Record<string, CacheItem>>(CACHE, {});
   const item = cached[code];
-  return item && Date.now() - item.time < 1000 * 60 * 60 * 24 * 7 ? item.product : null;
+  if (!item || !item.product) return null;
+  const age = Date.now() - item.time;
+  const source = item.product.source;
+  // Identity-only external records are short-lived to avoid stale labels, but
+  // are reused briefly to respect the secondary provider's free rate limits.
+  const ttlHours = source === 'upcitemdb' ? 12 : source === 'barcode-catalog' || source === 'national-catalog' ? 24 : 48;
+  return age >= 0 && age < ttlHours * 3600_000 ? item.product : null;
 }
 export function setCached(product: Product): void {
   const cached = read<Record<string, CacheItem>>(CACHE, {});

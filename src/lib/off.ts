@@ -66,6 +66,9 @@ export function needsCatalogRefresh(p: Product): boolean {
   if (!validBarcode(p.code) || ['manual', 'ai-food', 'ai-package'].includes(p.source || '')) return false;
   const name = p.name.trim();
   const placeholder = name.length === 0 || name.toLowerCase() === ('товар ' + p.code).toLowerCase();
+  // An identity-only result from the independent lookup remains partial by design.
+  // Refresh it when its short local TTL expires, not on every button press.
+  if (['upcitemdb', 'barcode-catalog', 'national-catalog'].includes(p.source || '')) return placeholder;
   const hasNutrition = Object.values(p.nutriments).some(v => typeof v === 'number' && Number.isFinite(v));
   return placeholder || (!p.ingredients.trim() && !hasNutrition);
 }
@@ -90,10 +93,10 @@ async function directProductLookup(code: string, signal: AbortSignal): Promise<P
       method: 'GET', headers: { Accept: 'application/json' },
       credentials: 'omit', signal, cache: 'default',
     });
-    if (response.status === 404) throw new ProductNotFound('Товар не найден в Open Food Facts.');
+    if (response.status === 404) return null; // Server outage does not prove every catalog was checked.
     if (!response.ok) return null;
     const data = await response.json() as ProductReply;
-    if (data.status !== 1 || !data.product) throw new ProductNotFound('Товар не найден в Open Food Facts.');
+    if (data.status !== 1 || !data.product) return null;
     return normalizeProduct(data.product, code);
   } catch (error) {
     if (error instanceof ProductNotFound) throw error;
