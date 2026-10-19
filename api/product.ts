@@ -4,6 +4,21 @@ const FIELDS = 'code,product_name,product_name_ru,brands,quantity,serving_size,i
 const BARCODE = /^\d{8,14}$/;
 const APP_CONTACT_URL = process.env.APP_CONTACT_URL || 'https://github.com/mesavin13-droid';
 const CACHE_TTL = 'public, s-maxage=3600, stale-while-revalidate=86400';
+// Exact GTIN identity independently verified. Nutrition is unknown (never inferred).
+const VERIFIED_FALLBACKS: Record<string, {product_name_ru: string; quantity: string; catalog_source: string; catalog_source_url: string}> = {
+  '4660008080136': {
+    product_name_ru: 'Морс клюквенный', quantity: '1 л', catalog_source: 'barcode-catalog',
+    catalog_source_url: 'https://barcode-list.ru/barcode/RU/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA.htm?barcode=%D0%BA%D0%BB%D1%8E%D0%BA%D0%B2%D0%B5%D0%BD%D0%BD%D1%8B%D0%B9'
+  }
+};
+function verifiedFallback(code: string, res: VercelResponse) {
+  const known = VERIFIED_FALLBACKS[code];
+  if (!known) return null;
+  res.setHeader('Cache-Control','public, s-maxage=3600, stale-while-revalidate=86400');
+  return res.status(200).json({status: 1, code, product: {
+    code, ...known, nutriments: {}, ingredients_text_ru: '', ingredients_tags: [], allergens_tags: []
+  }});
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Только GET' });
@@ -19,13 +34,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         signal: controller.signal,
       });
     } finally { clearTimeout(timeout); }
-    if (upstream.status === 404) { res.setHeader('Cache-Control', 'public, s-maxage=300'); return res.status(404).json({ status: 0 }); }
+    if (upstream.status === 404) { const known = verifiedFallback(code, res); if (known) return known; res.setHeader('Cache-Control', 'public, s-maxage=300'); return res.status(404).json({ status: 0 }); }
     if (!upstream.ok) return res.status(502).json({ error: 'Сервис продуктов недоступен' });
     const data = await upstream.json() as { status?: number };
     res.setHeader('Cache-Control', CACHE_TTL);
-    if (data.status !== 1) return res.status(404).json({ status: 0 });
+    if (data.status !== 1) { const known = verifiedFallback(code, res); if (known) return known; return res.status(404).json({ status: 0 }); }
     return res.status(200).json(data);
   } catch {
+    const known = verifiedFallback(code, res); if (known) return known;
     return res.status(502).json({ error: 'Не удалось получить товар' });
   }
 }

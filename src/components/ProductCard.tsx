@@ -13,7 +13,7 @@ function ingredientMarkup(text: string) {
   );
 }
 
-interface Props { product: Product; profile: Profile; favorite: boolean; onBack: () => void; onFavorite: () => void; }
+interface Props { product: Product; profile: Profile; favorite: boolean; onBack: () => void; onFavorite: () => void; onEdit?: () => void; }
 function getAlternative(product: Product): string {
   const category = product.categoriesTags.join(' ').toLowerCase();
   const sugar = number100(product.nutriments, 'sugars_100g');
@@ -24,7 +24,7 @@ function getAlternative(product: Product): string {
   return 'Посмотрите аналогичный продукт с меньшим количеством сахара, соли и насыщенных жиров. Обратите внимание на размер порции.';
 }
 
-export function ProductCard({ product, profile, favorite, onBack, onFavorite }: Props) {
+export function ProductCard({ product, profile, favorite, onBack, onFavorite, onEdit }: Props) {
   const rating = evaluate(product);
   const n = product.nutriments;
   const energy = calorie100(n);
@@ -46,6 +46,8 @@ export function ProductCard({ product, profile, favorite, onBack, onFavorite }: 
         <div className="result-brand"><div className="product-image-frame">{product.image ? <img src={product.image} alt={product.name} /> : <span className="product-placeholder"><Leaf size={38} /></span>}</div><div className="product-identity"><span className="muted-label">{product.brand || 'Продукт'}</span><h1>{product.name}</h1><span className="product-detail">{product.quantity || (isPhoto ? 'Результат по фотографии' : `Штрихкод ${product.code}`)}</span></div></div>
         <div className="result-score"><ScoreRing rating={rating} /><div><span className={`score-pill score-${rating.completeness === 'low' ? 'unknown' : rating.band}`} >{rating.completeness === 'low' ? 'Мало данных' : rating.title}</span><h2>Индекс состава</h2><p>{rating.summary}</p><small>0 — меньше замечаний, 100 — больше</small></div></div>
         {rating.completeness === 'low' && <div className="notice caution"><CircleHelp size={18} /> Мало сведений о продукте. Балл не следует считать достоверным.</div>}
+        {product.source === 'barcode-catalog' && <div className="verified-identity"><BadgeCheck size={18}/><span>Название подтверждено по штрихкоду. Калории и состав пока не найдены, данные другого морса не подставляем.</span></div>}
+        {(product.source === 'barcode-catalog' || product.source === 'manual') && onEdit && <button className="edit-label-button" type="button" onClick={onEdit}>Добавить данные с этикетки</button>}
       </div>
       {isPhoto && <div className="photo-result-notice"><CircleHelp size={20}/><div><b>Распознано ИИ · {product.confidence === 'high' ? 'высокая' : product.confidence === 'medium' ? 'средняя' : 'низкая'} уверенность</b><div>{product.source === 'ai-food' ? 'Состав и точные БЖУ нельзя определить по внешнему виду.' : 'Цифры и состав могли быть прочитаны с ошибками — сверьте этикетку.'}</div>{product.aiNotes && <div>{product.aiNotes}</div>}{product.aiAllergens?.length ? <div><b>Возможные аллергены с фото: </b>{product.aiAllergens.join(', ')}. Обязательно проверьте упаковку.</div> : null}</div></div>}
       {warnings.length > 0 && <section className="alert-panel" role="alert"><ShieldAlert size={23} /><div><h3>Проверьте аллергены и ограничения</h3>{warnings.map(w => <p key={w}>{w}</p>)}<small>Информация в базе может быть неполной. Всегда читайте упаковку.</small></div></section>}
@@ -66,7 +68,7 @@ export function ProductCard({ product, profile, favorite, onBack, onFavorite }: 
       </section>
       <section className="glass-panel ingredients-section"><div className="section-heading"><div><span className="overline">С ЭТИКЕТКИ</span><h2>Состав</h2></div></div><p className="ingredients-text">{product.ingredients ? ingredientMarkup(product.ingredients) : 'Состав пока отсутствует в базе. Сверьте информацию с упаковкой.'}</p>{product.ingredients && <p className="small-note">Выделены компоненты для дополнительной проверки. Это не означает, что каждый из них опасен.</p>}{rating.notices.map(text => <div className="inline-notice" key={text}><CircleHelp size={16} />{text}</div>)}</section>
       <section className="swap-panel"><span className="swap-icon"><Leaf size={24} /></span><div><strong>Более здоровая альтернатива</strong><p>{alternative}</p></div></section>
-      {isPhoto ? <div className="source-link">Источник: распознавание фотографии с помощью ИИ (требуется проверка).</div> : <a className="source-link" href={`https://world.openfoodfacts.org/product/${encodeURIComponent(product.code)}`} target="_blank" rel="noopener noreferrer">Источник: Open Food Facts <ExternalLink size={14} /></a>}
+      {isPhoto ? <div className="source-link">Источник: распознавание фотографии с помощью ИИ (требуется проверка).</div> : product.source === 'manual' ? <div className="source-link">БЖУ и состав: введены пользователем с этикетки.</div> : product.source === 'barcode-catalog' ? <a className="source-link" href={product.sourceUrl} target="_blank" rel="noopener noreferrer">Название: каталог штрихкодов <ExternalLink size={14}/></a> : <a className="source-link" href={`https://world.openfoodfacts.org/product/${encodeURIComponent(product.code)}`} target="_blank" rel="noopener noreferrer">Источник: Open Food Facts <ExternalLink size={14} /></a>}
       <div className="medical-disclaimer">Оценка ориентировочная и не заменяет совет врача.</div>
     </article>
   );

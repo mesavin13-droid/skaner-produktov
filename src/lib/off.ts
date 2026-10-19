@@ -2,6 +2,8 @@ import type { Nutriments, Product } from '../types';
 
 interface RawProduct {
   code?: string;
+  catalog_source?: string;
+  catalog_source_url?: string;
   product_name?: string;
   product_name_ru?: string;
   brands?: string;
@@ -34,6 +36,8 @@ export function cleanBarcode(code: string): string { return code.replace(/[\s-]/
 export function normalizeProduct(raw: RawProduct, code: string): Product {
   return {
     code,
+    source: raw.catalog_source === 'barcode-catalog' ? 'barcode-catalog' : 'off',
+    sourceUrl: raw.catalog_source_url,
     name: raw.product_name_ru?.trim() || raw.product_name?.trim() || `Товар ${code}`,
     brand: raw.brands?.split(',')[0]?.trim() ?? '',
     quantity: raw.quantity ?? '',
