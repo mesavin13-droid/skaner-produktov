@@ -105,8 +105,13 @@ export default function App() {
       const cached = getCached(code);
       const shouldRefresh = cached ? needsCatalogRefresh(cached) : true;
       const result = cached && !shouldRefresh ? cached : await getProduct(code, controller.signal);
-      if (!cached || shouldRefresh) setCached(result);
-      if (!controller.signal.aborted) openProduct(result);
+      // Preserve an existing image fetched for the exact same barcode if the new source
+      // has better text but no image. Do not reuse nutrition or ingredients from old data.
+      const complete = cached?.image && !result.image && cached.code === result.code
+        ? { ...result, image: cached.image }
+        : result;
+      if (!cached || shouldRefresh) setCached(complete);
+      if (!controller.signal.aborted) openProduct(complete);
     } catch (err) {
       if (!controller.signal.aborted) {
         const previous = err instanceof ProductNotFound ? null : getHistory().find(entry => entry.product.code === code);
