@@ -10,7 +10,6 @@ const num=(input: string): number|null=>{
   const x=Number(input.replace(',','.').replace(/\s/g,''));
   return Number.isFinite(x)&&x>=0?x:null;
 };
-const grams=(s:string)=>/^\s*(?:г|гр|g|мг|mg|мл|ml|ккал|kcal|кдж|kj|$)/i.test(s);
 /** Deliberately conservative parser: numeric labels only if the photo clearly says "per 100 g/ml". */
 export function parseRussianLabel(raw:string): LabelRead {
   const text=raw.replace(/\r/g,'\n').replace(/[\u00a0\t]+/g,' ').replace(/[‐‑–—]/g,'-').slice(0,12000);
