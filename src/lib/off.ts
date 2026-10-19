@@ -36,7 +36,7 @@ export function cleanBarcode(code: string): string { return code.replace(/[\s-]/
 export function normalizeProduct(raw: RawProduct, code: string): Product {
   return {
     code,
-    source: raw.catalog_source === 'barcode-catalog' ? 'barcode-catalog' : 'off',
+    source: raw.catalog_source === 'barcode-catalog' ? 'barcode-catalog' : raw.catalog_source === 'national-catalog' ? 'national-catalog' : 'off',
     sourceUrl: raw.catalog_source_url,
     name: raw.product_name_ru?.trim() || raw.product_name?.trim() || `Товар ${code}`,
     brand: raw.brands?.split(',')[0]?.trim() ?? '',

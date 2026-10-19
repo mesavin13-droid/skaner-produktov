@@ -17,7 +17,7 @@ export interface Nutriments {
   [name: string]: number | undefined;
 }
 export interface Product {
-  source?: 'off' | 'ai-package' | 'ai-food' | 'barcode-catalog' | 'manual';
+  source?: 'off' | 'ai-package' | 'ai-food' | 'barcode-catalog' | 'national-catalog' | 'manual';
   sourceUrl?: string;
   confidence?: 'high' | 'medium' | 'low';
   aiNotes?: string;
