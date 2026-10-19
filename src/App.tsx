@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { BottomNav } from './components/BottomNav';
 import { CameraScanner } from './components/CameraScanner';
+import { LiveLabelScanner } from './components/LiveLabelScanner';
 import { MarkingPanel } from './components/MarkingPanel';
 import { parseMarking, type MarkingInfo } from './lib/gs1';
 import { ProductEditor } from './components/ProductEditor';
@@ -51,6 +52,7 @@ function SkeletonResult() {
 export default function App() {
   const [screen, setScreen] = useState<Screen>('scanner');
   const [cameraOn, setCameraOn] = useState(false);
+  const [liveLabelOn, setLiveLabelOn] = useState(false);
   const [marking, setMarking] = useState<MarkingInfo | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -84,13 +86,13 @@ export default function App() {
 
   const setView = (next: Screen) => {
     request.current?.abort(); pending.current = false;
-    setCameraOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null); setEditingProduct(null); setMarking(null);
+    setCameraOn(false); setLiveLabelOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null); setEditingProduct(null); setMarking(null);
     setScreen(next); setShowComparison(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const openProduct = (p: Product) => {
-    setCameraOn(false); setLoading(false); setPhotoDraft(null); setEditingProduct(null); pending.current = false; setProduct(p);
+    setCameraOn(false); setLiveLabelOn(false); setLoading(false); setPhotoDraft(null); setEditingProduct(null); pending.current = false; setProduct(p);
     setHistory(addHistory(p)); setScreen('scanner'); setIssue(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -104,7 +106,7 @@ export default function App() {
     pending.current = true;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
-    setCameraOn(false); setProduct(null); setManualOpen(false); setManualCode(''); setIssue(null);
+    setCameraOn(false); setLiveLabelOn(false); setProduct(null); setManualOpen(false); setManualCode(''); setIssue(null);
     setLoading(true); setScreen('scanner');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     try {
@@ -139,7 +141,7 @@ export default function App() {
 
   const preparePhoto = async (file: File | undefined, mode: PhotoMode) => {
     if (!file || loading) return;
-    setCameraOn(false); setIssue(null); setLoading(true);
+    setCameraOn(false); setLiveLabelOn(false); setIssue(null); setLoading(true);
     try {
       const image = await makeThumbnail(file);
       setPhotoDraft({ image, mode });
@@ -169,6 +171,37 @@ export default function App() {
       setOcrBusy(false);
       setOcrStatus('');
     }
+  };
+
+  const startLiveLabel = (barcode = '') => {
+    request.current?.abort();
+    pending.current = false;
+    setPhotoCode(barcode);
+    setCameraOn(false);
+    setLiveLabelOn(true);
+    setProduct(null);
+    setIssue(null);
+    setMarking(null);
+    setManualOpen(false);
+    setPhotoDraft(null);
+    setLoading(false);
+    setScreen('scanner');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const recognizedFromCamera = (result: ReturnType<typeof import('./lib/labelOcr').parseRussianLabel>) => {
+    const stored = photoCode
+      ? getCached(photoCode) || getHistory().find(x => x.product.code === photoCode)?.product
+      : null;
+    const draft = createOcrDraft(result, photoCode, stored);
+    draft.aiNotes = [
+      ...result.warnings,
+      'Считано с камеры. Обязательно сверьте значения с этикеткой перед сохранением.',
+    ].join(' ');
+    setOcrReviewText(result.rawText);
+    setLiveLabelOn(false);
+    setEditingProduct(draft);
+    setIssue(null);
   };
 
   const sendPhoto = async () => {
@@ -202,15 +235,17 @@ export default function App() {
   return <div className="app-backdrop"><div className="app-shell">
     {!product && <header className="site-head"><div className="app-brand"><div className="brand-mark"><ScanLine size={22} strokeWidth={2.4}/></div><div><b>Сканер</b><span>продуктов</span></div></div><div className="head-actions"><div className="head-status"><span className={`pulse-dot ${offline ? 'disconnected' : ''}`} />{offline ? 'Офлайн' : 'Онлайн'}</div><button type="button" className="head-avatar" onClick={() => setView('profile')} aria-label="Открыть профиль"><UserRound size={20}/></button></div></header>}
     <main className="content-area">
-      {product ? <>{marking && <div className="marking-result"><MarkingPanel marking={marking}/></div>}<ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); setMarking(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} onPhotoLabel={() => { setPhotoCode(product.code); setProduct(null); setScreen('scanner'); setIssue(null); packageInput.current?.click(); }} /></> : <>
+      {product ? <>{marking && <div className="marking-result"><MarkingPanel marking={marking}/></div>}<ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); setMarking(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} onPhotoLabel={() => startLiveLabel(product.code)} /></> : <>
       {screen === 'scanner' && <div className="scanner-page animate-rise">
         <div className="intro-row"><div><span className="eyebrow"><Sparkles size={14} /> ПРОВЕРЯЙ ОСОЗНАННО</span><h1>Что внутри <span>продукта?</span></h1><p>Сканируйте штрихкод или Data Matrix. Покажем данные товара и доступный срок годности.</p></div></div>
         <div className="scanner-card glass-panel"><div className="scanner-topline"><span><span className="small-led"/> СКАНИРОВАНИЕ</span><span className="glass-label">EAN / Data Matrix</span></div>
+          {liveLabelOn ? <LiveLabelScanner onRecognized={recognizedFromCamera} onCancel={() => setLiveLabelOn(false)}/> : <>
           <CameraScanner active={cameraOn} onDetected={(code) => void lookup(code)} onCancel={() => setCameraOn(false)} />
           <div className="scanner-actions"><button className="primary-cta" type="button" onClick={() => { if (loading) return; setIssue(null); setCameraOn(!cameraOn); }}><Barcode size={21}/>{cameraOn ? 'Закрыть камеру' : 'Сканировать код'}<ArrowRight size={20}/></button>
-            <div className="scan-mini-actions"><button type="button" className="soft-action" onClick={() => { setCameraOn(false); setManualOpen(v => !v); setIssue(null); }}><ScanLine size={18}/> Ввести код</button><button type="button" className="soft-action" onClick={() => { setPhotoCode(''); packageInput.current?.click(); }}><Camera size={18}/> Фото состава</button></div>
+            <div className="scan-mini-actions"><button type="button" className="soft-action" onClick={() => { setCameraOn(false); setManualOpen(v => !v); setIssue(null); }}><ScanLine size={18}/> Ввести код</button><button type="button" className="soft-action" onClick={() => startLiveLabel()}><Camera size={18}/> Камера состава</button></div>
           </div>
-          <div className="photo-extra"><button type="button" className="soft-action photo-food" onClick={() => foodInput.current?.click()}><Leaf size={17}/> Фото еды или фрукта</button></div>
+          <div className="photo-extra"><button type="button" className="soft-action photo-food" onClick={() => { setPhotoCode(''); packageInput.current?.click(); }}><Camera size={17}/> Фото этикетки</button><button type="button" className="soft-action photo-food" onClick={() => foodInput.current?.click()}><Leaf size={17}/> Фото еды</button></div>
+          </>}
           {photoDraft && <div className="photo-confirm"><img src={photoDraft.image} alt="Фото выбранной этикетки" /><div className="photo-confirm-content">
             <b>{photoDraft.mode === 'package' ? 'Прочитать состав и БЖУ' : 'Оценить еду на фотографии'}</b>
             <p>{photoDraft.mode === 'package'
@@ -244,8 +279,8 @@ export default function App() {
                 <button type="button" onClick={() => { void lookup(issue.code!); }}>
                   <ScanLine size={16}/> Повторить поиск
                 </button>
-                <button type="button" onClick={() => { setPhotoCode(issue.code || ''); packageInput.current?.click(); }}>
-                  <Camera size={16}/> Фото состава
+                <button type="button" onClick={() => startLiveLabel(issue.code || '')}>
+                  <Camera size={16}/> Камера состава
                 </button>
                 <button type="button" onClick={() => {
                   setEditingProduct({
