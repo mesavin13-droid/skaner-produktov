@@ -37,7 +37,7 @@ export function cleanBarcode(code: string): string { return code.replace(/[\s-]/
 export function normalizeProduct(raw: RawProduct, code: string): Product {
   return {
     code,
-    source: raw.catalog_source === 'barcode-catalog' ? 'barcode-catalog' : raw.catalog_source === 'national-catalog' ? 'national-catalog' : raw.catalog_source === 'ean-online' ? 'ean-online' : raw.catalog_source === 'upcitemdb' ? 'upcitemdb' : 'off',
+    source: raw.catalog_source === 'barcode-catalog' ? 'barcode-catalog' : raw.catalog_source === 'national-catalog' ? 'national-catalog' : raw.catalog_source === 'foodbase' ? 'foodbase' : raw.catalog_source === 'ean-online' ? 'ean-online' : raw.catalog_source === 'upcitemdb' ? 'upcitemdb' : 'off',
     sourceUrl: raw.catalog_source_url,
     sourceNote: raw.catalog_note,
     name: raw.product_name_ru?.trim() || raw.product_name?.trim() || `Товар ${code}`,
@@ -68,7 +68,7 @@ export function needsCatalogRefresh(p: Product): boolean {
   const placeholder = name.length === 0 || name.toLowerCase() === ('товар ' + p.code).toLowerCase();
   // An identity-only result from the independent lookup remains partial by design.
   // Refresh it when its short local TTL expires, not on every button press.
-  if (['upcitemdb', 'ean-online', 'barcode-catalog', 'national-catalog'].includes(p.source || '')) return placeholder;
+  if (['upcitemdb', 'ean-online', 'foodbase', 'barcode-catalog', 'national-catalog'].includes(p.source || '')) return placeholder;
   const hasNutrition = Object.values(p.nutriments).some(v => typeof v === 'number' && Number.isFinite(v));
   return placeholder || (!p.ingredients.trim() && !hasNutrition);
 }

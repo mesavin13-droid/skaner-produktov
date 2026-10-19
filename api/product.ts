@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getNationalCatalogProduct } from '../server/nationalCatalog';
 import { lookupUpcItemDb } from '../server/upcItemDb';
 import { lookupEanOnline } from '../server/eanOnline';
+import { lookupFoodBase } from '../server/foodBase';
 import {
   cacheCanServeStale, cacheIsFresh, readSharedProduct, saveSharedProduct,
   type CacheSource, type CachedRecord,
@@ -122,6 +123,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return saveAndSend(res, code, merged, 'barcode-catalog');
         }
         if (name && !/^товар\\s*\\d+$/i.test(name)) {
+          const values = raw.nutriments as ProductRow | undefined;
+          const lacksMacros = !values || !Object.values(values).some(v => typeof v === 'number' && Number.isFinite(v));
+          if (lacksMacros) {
+            const foodBase = await lookupFoodBase(code);
+            if (foodBase) {
+              const combined = { ...raw, nutriments: foodBase.nutriments,
+                catalog_source: 'foodbase', catalog_source_url: 'https://food-bd.com/',
+                catalog_note: foodBase.catalog_note };
+              res.setHeader('Cache-Control','no-store');
+              return res.status(200).json({status:1,code,product:combined});
+            }
+          }
           return saveAndSend(res, code, raw, 'openfoodfacts');
         }
         // Partial OFF record: keep its image but search other catalogs for an exact GTIN.
@@ -136,6 +149,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Upstream connection and timeouts are handled by the fallback chain.
   }
 
+  const licensedProduct = await lookupFoodBase(code);
+  if (licensedProduct) {
+    res.setHeader('Cache-Control','no-store');
+    return res.status(200).json({status:1,code,product:licensedProduct});
+  }
   const fallback = await tryNationalOrFallback(code);
   if (fallback) return saveAndSend(res, code, fallback.product, fallback.source);
 

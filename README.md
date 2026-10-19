@@ -134,3 +134,7 @@ This is an identity fallback, **not** a complete Russian ingredient database. To
 ## EAN-online.ru (Russian coverage, optional)
 
 The Russian-oriented barcode source is integrated as an **optional** server-only provider: [EAN-online API](https://ean-online.ru/api/). Its GET `/api/v1/barcode/{barcode}` endpoint requires a provider-issued Bearer token. Ask info@ean-online.ru for access, then configure `EAN_ONLINE_API_TOKEN` as a sensitive Production environment variable in Vercel and redeploy. Until configured, this provider is skipped automatically. API data provides barcode, name, vendor and category, **not verified nutrition**. Provider records are shown transiently, not written into the public Supabase product cache without a redistribution agreement.
+
+## FoodBase: licensed Russian barcode nutrition
+
+[FoodBase official API](https://food-bd.com/dokumentaciya-api) returns calories/protein/fat/carbs on 100g for a matching barcode; it requires a paid license and server-only `FOODBASE_API_KEY` in Vercel. We only call it when that key is configured; it is not currently active or purchased. The parser requires an exact matching EAN and valid nutrient values. **FoodBase does not provide ingredients/allergens or an expiration date.** Read those from original packaging (OCR) or verified catalog. FoodBase results are never written to shared Supabase cache without an appropriate redistribution license.
