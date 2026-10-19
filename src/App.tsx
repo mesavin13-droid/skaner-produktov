@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { BottomNav } from './components/BottomNav';
 import { CameraScanner } from './components/CameraScanner';
+import { ProductEditor } from './components/ProductEditor';
 import { ProductCard } from './components/ProductCard';
 import { ScoreRing } from './components/ScoreRing';
 import { ALLERGENS, evaluate } from './lib/evaluate';
@@ -47,6 +48,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('scanner');
   const [cameraOn, setCameraOn] = useState(false);
   const [product, setProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [history, setHistory] = useState<SavedProduct[]>(getHistory);
   const [favorites, setFavorites] = useState<Product[]>(getFavorites);
   const [profile, changeProfile] = useState<Profile>(getProfile);
@@ -74,13 +76,13 @@ export default function App() {
 
   const setView = (next: Screen) => {
     request.current?.abort(); pending.current = false;
-    setCameraOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null);
+    setCameraOn(false); setProduct(null); setIssue(null); setLoading(false); setPhotoDraft(null); setEditingProduct(null);
     setScreen(next); setShowComparison(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const openProduct = (p: Product) => {
-    setCameraOn(false); setLoading(false); setPhotoDraft(null); pending.current = false; setProduct(p);
+    setCameraOn(false); setLoading(false); setPhotoDraft(null); setEditingProduct(null); pending.current = false; setProduct(p);
     setHistory(addHistory(p)); setScreen('scanner'); setIssue(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -151,7 +153,7 @@ export default function App() {
   return <div className="app-backdrop"><div className="app-shell">
     {!product && <header className="site-head"><div className="app-brand"><div className="brand-mark"><ScanLine size={22} strokeWidth={2.4}/></div><div><b>Сканер</b><span>продуктов</span></div></div><div className="head-actions"><div className="head-status"><span className={`pulse-dot ${offline ? 'disconnected' : ''}`} />{offline ? 'Офлайн' : 'Онлайн'}</div><button type="button" className="head-avatar" onClick={() => setView('profile')} aria-label="Открыть профиль"><UserRound size={20}/></button></div></header>}
     <main className="content-area">
-      {product ? <ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); }} onFavorite={() => toggleFave(product)} /> : <>
+      {product ? <ProductCard product={product} profile={profile} favorite={favorites.some(p => p.code === product.code)} onBack={() => { setProduct(null); setIssue(null); }} onFavorite={() => toggleFave(product)} onEdit={() => setEditingProduct(product)} /> : <>
       {screen === 'scanner' && <div className="scanner-page animate-rise">
         <div className="intro-row"><div><span className="eyebrow"><Sparkles size={14} /> ПРОВЕРЯЙ ОСОЗНАННО</span><h1>Что внутри <span>продукта?</span></h1><p>Наведите камеру на штрихкод, а мы разберём состав понятным языком.</p></div></div>
         <div className="scanner-card glass-panel"><div className="scanner-topline"><span><span className="small-led"/> СКАНИРОВАНИЕ</span><span className="glass-label">EAN / UPC</span></div>
@@ -165,7 +167,7 @@ export default function App() {
           {photoDraft && <div className="photo-confirm"><img src={photoDraft.image} alt="Фото перед отправкой" /><div className="photo-confirm-content"><b>{photoDraft.mode === 'package' ? 'Анализ упаковки' : 'Оценка еды по фото'}</b><p>Снимок будет отправлен ИИ-сервису для распознавания. Результаты приблизительные; для аллергий проверяйте этикетку.</p><div className="photo-confirm-actions"><button type="button" onClick={() => setPhotoDraft(null)}>Отмена</button><button type="button" onClick={() => void sendPhoto()}>Отправить на анализ <ArrowRight size={16}/></button></div></div></div>}
           {manualOpen && <form className="manual-form" onSubmit={e => { e.preventDefault(); void lookup(manualCode); }}><label htmlFor="barcode-input">Штрихкод с упаковки</label><div><input id="barcode-input" type="text" inputMode="numeric" autoComplete="off" value={manualCode} maxLength={18} onChange={e => setManualCode(e.target.value)} placeholder="Например, 460..."/><button type="submit" disabled={loading}>Найти <ArrowRight size={17}/></button></div></form>}
         </div>
-        {issue && <div role="alert" className={`feedback ${issue.kind}`}><AlertCircle size={21}/><div><strong>{issue.kind === 'missing' ? 'Товар не найден' : 'Информация'}</strong><p>{issue.text}</p>{issue.kind === 'missing' && <><span className="feedback-code">Считан штрихкод: <b>{lastBarcode}</b></span><small>Проверьте цифры на упаковке. Если они верны, продукта пока нет в каталоге.</small><div className="feedback-actions"><button type="button" onClick={() => { setManualOpen(true); setManualCode(lastBarcode); setIssue(null); }}><ScanLine size={16}/> Проверить код</button><button type="button" onClick={() => packageInput.current?.click()}><Camera size={16}/> Фото состава</button></div></>}</div><button type="button" aria-label="Закрыть" onClick={() => setIssue(null)}><X size={18}/></button></div>}
+        {issue && <div role="alert" className={`feedback ${issue.kind}`}><AlertCircle size={21}/><div><strong>{issue.kind === 'missing' ? 'Товар не найден' : 'Информация'}</strong><p>{issue.text}</p>{issue.kind === 'missing' && <><span className="feedback-code">Считан штрихкод: <b>{lastBarcode}</b></span><small>Проверьте цифры на упаковке. Если они верны, продукта пока нет в каталоге.</small><div className="feedback-actions"><button type="button" onClick={() => { setManualOpen(true); setManualCode(lastBarcode); setIssue(null); }}><ScanLine size={16}/> Проверить код</button><button type="button" onClick={() => { setEditingProduct({ code: lastBarcode, name: `Товар ${lastBarcode}`, brand: '', quantity: '', ingredients: '', ingredientsTags: [], allergensTags: [], tracesTags: [], additivesTags: [], categoriesTags: [], labelsTags: [], ingredientsAnalysisTags: [], servingSize: '', nutriments: {} }); setIssue(null); }}><Leaf size={16}/> Добавить товар</button><button type="button" onClick={() => packageInput.current?.click()}><Camera size={16}/> Фото состава</button></div></>}</div><button type="button" aria-label="Закрыть" onClick={() => setIssue(null)}><X size={18}/></button></div>}
         {loading && <SkeletonResult/>}
         <div className="feature-grid"><div className="feature-tile"><span className="feature-icon green-glow"><Leaf size={22}/></span><strong>Состав без сложностей</strong><small>Сахар, жиры, добавки и объяснения</small></div><div className="feature-tile"><span className="feature-icon purple-glow"><ShieldCheck size={22}/></span><strong>Оценка от 0 до 100</strong><small>С учётом данных о продукте</small></div></div>
         {history.length > 0 && <section className="recent-section"><div className="section-headline"><div><span className="overline">ВАШИ ПРОДУКТЫ</span><h2>Недавно смотрели</h2></div><button type="button" onClick={() => setView('history')}>Все <ChevronRight size={17}/></button></div><div className="recent-list">{history.slice(0, 3).map(({ product: p }) => <ShelfItem key={p.code} product={p} onOpen={() => openProduct(p)} />)}</div></section>}
@@ -177,5 +179,6 @@ export default function App() {
       </>}
     </main>
     <BottomNav screen={screen} onSelect={setView}/>
+    {editingProduct && <ProductEditor initial={editingProduct} onCancel={() => setEditingProduct(null)} onSave={saved => { setCached(saved); openProduct(saved); }}/>}
   </div></div>;
 }

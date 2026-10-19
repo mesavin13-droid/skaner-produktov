@@ -1653,3 +1653,22 @@ button:focus-visible,input:focus-visible {
 .feedback-actions button:first-child { background:#fff; }
 .feedback-code { display:block; margin-top:8px; font-size:11px; color:#8d6e53; word-break:break-word; }
 .feedback-code b { color:#6f5c50; font-size:12px; letter-spacing:.5px; }
+
+/* Verified fallback and user-entered label details */
+.verified-identity { display:flex; align-items:flex-start; gap:9px; border:1px solid #d5e7f4; background:#f2f9ff; border-radius:15px; color:#54759b; font-size:11px; line-height:1.6; margin-top:12px; padding:11px; }
+.verified-identity svg { flex:none; margin-top:2px; }
+.edit-label-button { border:1px solid #bdcdf0; background:linear-gradient(135deg,#f9fbff,#e3edff); color:#4767ad; width:100%; margin-top:12px; padding:13px; border-radius:15px; font-size:12px; font-weight:800; }
+.editor-overlay { position:fixed; inset:0; z-index:100; display:flex; align-items:flex-end; justify-content:center; background:rgba(26,33,65,.55); backdrop-filter:blur(10px); }
+.editor-sheet { width:100%; max-width:540px; max-height:93dvh; overflow:auto; overscroll-behavior:contain; border-radius:28px 28px 0 0; padding:23px 20px calc(23px + env(safe-area-inset-bottom,0px)); background:linear-gradient(165deg,#fff,#f0f3ff); box-shadow:0 -18px 55px #1b275d36; }
+.editor-top { display:flex; justify-content:space-between; align-items:start; gap:12px; }
+.editor-top h2 { font-size:23px; margin:5px 0; }
+.editor-top button { border:0; background:#e4eaff; width:39px; height:39px; border-radius:12px; color:#657aaa; display:grid; place-items:center; }
+.editor-sheet>p { margin:11px 0 16px; font-size:12px; color:#777f9e; line-height:1.6; }
+.editor-sheet form { display:grid; gap:14px; }
+.editor-two { display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+.editor-label { display:grid; gap:7px; color:#5b648a; font-weight:700; font-size:11px; }
+.editor-label input,.editor-label textarea { width:100%; min-width:0; border:1px solid #dbe2f2; background:#fff; color:#293152; border-radius:12px; font:inherit; font-size:14px; padding:12px; resize:vertical; }
+.editor-group-title { display:flex; align-items:center; gap:8px; color:#5c6ca0; font-size:12px; font-weight:800; margin-top:3px; }
+.editor-reminder { font-size:11px; color:#7e85a4; line-height:1.5; }
+.editor-error { font-size:12px; color:#c14357; }
+.editor-save { display:flex; justify-content:center; align-items:center; gap:9px; padding:14px; border:0; border-radius:16px; background:linear-gradient(135deg,#86a7f3,#526ec7); color:white; font-weight:800; box-shadow:0 6px 18px #6582d466; }
