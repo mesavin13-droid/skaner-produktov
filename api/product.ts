@@ -39,7 +39,8 @@ async function alternative(code: string, res: VercelResponse, status: 404 | 502)
     res.setHeader('Cache-Control', 'public, s-maxage=300');
     return res.status(404).json({ status: 0 });
   }
-  return res.status(502).json({ error: 'Сервис продуктов недоступен' });
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(503).json({ error: 'Источник сведений о товарах временно недоступен', code: 'SOURCE_UNAVAILABLE' });
 }
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Только GET' });
@@ -47,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!BARCODE.test(code)) return res.status(400).json({ error: 'Некорректный штрихкод' });
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 6000);
     let upstream: Response;
     try {
       upstream = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${FIELDS}`, {
