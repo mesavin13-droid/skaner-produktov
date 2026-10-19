@@ -67,6 +67,9 @@ export function ProductCard({ product, profile, favorite, onBack, onFavorite, on
           <p>Это наша приблизительная оценка, а не медицинский показатель.</p>
           <small>0 — меньше замечаний, 100 — больше. Не показывает вероятность вреда.</small>
         </div></div>
+        {product.cacheStatus === 'stale' && <div className="stale-product-warning" role="status"><CircleHelp size={19}/><span>
+          <b>Данные из сохранённой карточки.</b> Каталоги временно не ответили. Сведения могли измениться — перед покупкой сверьте состав и аллергены с упаковкой.
+        </span></div>}
         {rating.completeness === 'low' && <div className="notice caution"><CircleHelp size={18} /> Мало сведений о продукте. Балл не следует считать достоверным.</div>}
         {(product.source === 'barcode-catalog' || product.source === 'national-catalog') && <div className="verified-identity"><BadgeCheck size={18}/><span>Название подтверждено по штрихкоду. Если пищевая ценность или состав отсутствуют в источнике, мы не подставляем сведения о похожем товаре.</span></div>}
         {(product.source === 'barcode-catalog' || product.source === 'national-catalog' || product.source === 'manual') && onEdit && <button className="edit-label-button" type="button" onClick={onEdit}>Добавить данные с этикетки</button>}

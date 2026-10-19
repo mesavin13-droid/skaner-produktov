@@ -67,7 +67,7 @@ const OFF_FIELDS = [
   'nova_group','categories_tags','labels_tags','ingredients_analysis_tags',
 ].join(',');
 
-type ProductReply = { status?: number; product?: RawProduct };
+type ProductReply = { status?: number; product?: RawProduct; cache?: { status: 'fresh' | 'stale'; updated_at: string } };
 
 /** OFF allows cross-origin GETs; browser fallback uses the user's own connection/IP.
  * The browser may reject it due to CORS or a temporary rate-limit; that is handled safely.
@@ -113,7 +113,12 @@ export async function getProduct(code: string, signal?: AbortSignal): Promise<Pr
     if (server?.ok) {
       const data = await server.json() as ProductReply;
       if (data.status !== 1 || !data.product) throw new ProductNotFound('Товар пока отсутствует в доступных каталогах.');
-      return normalizeProduct(data.product, clean);
+      const normalized = normalizeProduct(data.product, clean);
+      if (data.cache?.status === 'fresh' || data.cache?.status === 'stale') {
+        normalized.cacheStatus = data.cache.status;
+        if (data.cache.updated_at) normalized.cacheUpdatedAt = data.cache.updated_at;
+      }
+      return normalized;
     }
     // Only try fallback for transient upstream / server errors.
     // Do not silently bypass invalid client input or authorization errors.

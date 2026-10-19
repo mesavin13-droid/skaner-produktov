@@ -1745,3 +1745,8 @@ button:focus-visible,input:focus-visible {
   .compact-score .score-ring { width:102px!important; height:102px!important; }
   .easy-insights,.easy-allergens { padding:17px 14px; }
 }
+
+/* Source freshness must be explicit: a cached product is not current confirmation. */
+.stale-product-warning { display:flex; align-items:flex-start; gap:9px; background:#fff5e7; border:1px solid #edd9ba; border-radius:15px; padding:13px; margin:15px 0 4px; color:#926932; font-size:12px; line-height:1.6; }
+.stale-product-warning svg { flex:none; margin-top:2px; }
+.stale-product-warning b { display:block; color:#835520; }
