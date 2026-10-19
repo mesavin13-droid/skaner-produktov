@@ -1695,3 +1695,53 @@ button:focus-visible,input:focus-visible {
 .marking-external { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:750; color:#5e7fc5; }
 .marking-result { padding:0 8px; }
 @media(max-width:370px) { .marking-expiry { align-items:flex-start; flex-direction:column; } }
+
+
+/* v2.4: plain-language mobile product result, designed for one-handed reading */
+.result-hero .plain-verdict { margin-top:20px; padding:17px 17px 16px; border:1px solid #d7e7f8; border-radius:21px; background:linear-gradient(130deg, #e7f3ff, #f3f0ff); }
+.plain-verdict>span { font-size:10px; letter-spacing:1.6px; color:#7182b0; font-weight:800; }
+.plain-verdict h2 { font-size:21px; line-height:1.3; margin:7px 0 8px; letter-spacing:-.45px; color:#304466; }
+.plain-verdict p { font-size:13px; line-height:1.65; color:#63728b; }
+.plain-verdict.caution { border-color:#f1e1bd; background:linear-gradient(145deg,#fff5db,#fffafb); }
+.plain-verdict.caution>span { color:#a77c40; }
+.plain-verdict.caution h2 { color:#775128; }
+.plain-verdict.caution p { color:#8d7555; }
+.plain-verdict.bad { border-color:#f1d3d3; background:linear-gradient(135deg,#fff0ec,#fff8f3); }
+.plain-verdict.unknown { border-color:#dadde9; background:linear-gradient(135deg,#f3f4fa,#f6f8fc); }
+.compact-score { margin-top:15px; border-top:1px solid #e5e9f4; padding-top:16px; gap:14px; }
+.compact-score .score-pill { display:inline-block; font-size:10px; }
+.compact-score h2 { font-size:16px; line-height:1.3; margin:8px 0 4px; }
+.compact-score p { font-size:11px; line-height:1.5; }
+.compact-score small { display:block; line-height:1.6; font-size:10px; margin-top:4px; }
+.easy-insights,.easy-allergens { padding:20px 18px; margin-top:15px; }
+.easy-insights .section-heading h2 { font-size:21px; }
+.easy-points { display:flex; flex-direction:column; gap:10px; margin-top:15px; }
+.easy-point { display:flex; gap:12px; padding:14px 13px; border-radius:17px; background:#f0f4ff; color:#5065a0; }
+.easy-point.easy-attention { background:#fff5e9; color:#ae7e47; }
+.easy-point.easy-positive { background:#eaf8f1; color:#438c6d; }
+.easy-point-symbol { display:grid; place-items:start center; flex:none; padding-top:2px; }
+.easy-point strong { font-size:13px; color:#303b5d; line-height:1.4; display:block; }
+.easy-point p { font-size:12px; line-height:1.65; margin-top:5px; color:#788296; }
+.easy-point.easy-attention p { color:#866d54; }
+.expand-content { margin-top:13px; display:flex; justify-content:center; align-items:center; gap:9px; border:1px solid #dbe4f7; border-radius:13px; padding:12px 14px; width:100%; background:#f1f5ff; color:#4e6aa7; font-weight:800; font-size:12px; }
+.easy-allergen-head { display:flex; align-items:center; gap:11px; margin-bottom:11px; color:#cf946d; }
+.easy-allergen-head>svg { flex:none; }
+.easy-allergen-head h2 { margin-top:4px; font-size:20px; color:#303959; }
+.easy-allergens p { font-size:12px; color:#646e89; line-height:1.7; margin:9px 0; }
+.easy-allergens small { display:block; border-top:1px solid #e7ebf4; padding-top:11px; font-size:11px; color:#8c93a8; line-height:1.5; }
+.allergen-tags { display:flex; flex-wrap:wrap; gap:7px; margin:12px 0; }
+.allergen-tags span { font-size:11px; font-weight:800; color:#916341; background:#fff1dd; border:1px solid #f0ddc4; padding:8px 11px; border-radius:12px; }
+.technical-notes { margin-top:14px; border-top:1px solid #e2e6f1; padding-top:12px; font-size:11px; color:#838da8; }
+.technical-notes summary { cursor:pointer; color:#5974af; font-size:12px; font-weight:750; line-height:1.6; }
+.technical-notes p { padding:9px 0; border-bottom:1px solid #edf0f7; font-size:11px; line-height:1.55; }
+.nutrition-tile .nutrient-unknown { font-size:10px; color:#7e8c9f; font-weight:650; line-height:1.2; }
+.result .ingredients-section { margin-top:15px; }
+@media(max-width:390px){
+  .result-hero { padding:15px 14px; }
+  .plain-verdict h2 { font-size:18px; }
+  .plain-verdict p { font-size:12px; }
+  .compact-score { gap:8px; }
+  .compact-score h2 { font-size:15px; }
+  .compact-score .score-ring { width:102px!important; height:102px!important; }
+  .easy-insights,.easy-allergens { padding:17px 14px; }
+}
