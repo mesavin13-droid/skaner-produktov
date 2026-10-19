@@ -53,6 +53,8 @@ export function ProductEditor({ initial, onCancel, onSave }: {
     <section className="editor-sheet">
       <div className="editor-top"><div><span className="overline">ДАННЫЕ С УПАКОВКИ</span><h2>Добавить товар</h2></div><button type="button" onClick={onCancel} aria-label="Закрыть"><X size={22} /></button></div>
       <p>Штрихкод: <b>{initial.code}</b>. Перенесите сведения именно с этой этикетки, неизвестные поля оставьте пустыми.</p>
+      {initial.aiNotes && <p className="editor-ocr-note">{initial.aiNotes}</p>}
+      {initial.sourceNote && <p className="editor-ocr-note">{initial.sourceNote}</p>}
       <form onSubmit={save}>
         <label className="editor-label">Название продукта<input required value={name} onChange={e => setName(e.target.value)} placeholder="Например, морс клюквенный" /></label>
         <div className="editor-two">

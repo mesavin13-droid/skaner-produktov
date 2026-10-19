@@ -18,14 +18,14 @@ export function makeThumbnail(file: File): Promise<string> {
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const scale = Math.min(1, 1300 / Math.max(img.naturalWidth, img.naturalHeight));
+      const scale = Math.min(1, 1700 / Math.max(img.naturalWidth, img.naturalHeight));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
       canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
       const ctx = canvas.getContext('2d');
       if (!ctx) { reject(new Error('Не удалось обработать изображение.')); return; }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const base64 = canvas.toDataURL('image/jpeg', 0.77);
+      const base64 = canvas.toDataURL('image/jpeg', 0.83);
       if (base64.length > 3_700_000) { reject(new Error('Снимок не удалось сжать. Попробуйте снять ближе.')); return; }
       resolve(base64);
     };

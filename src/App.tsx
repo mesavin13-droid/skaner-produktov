@@ -176,9 +176,10 @@ export default function App() {
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
     const { image, mode } = photoDraft;
-    setPhotoDraft(null); setIssue(null); setLoading(true);
+    setIssue(null); setLoading(true);
     try {
       const result = await analyzePhoto(image, mode, controller.signal);
+      setPhotoDraft(null);
       if (!controller.signal.aborted) openProduct(result);
     } catch (error) {
       if (!controller.signal.aborted) setIssue({ kind: 'error', text: error instanceof Error ? error.message : 'Ошибка анализа фото.' });
