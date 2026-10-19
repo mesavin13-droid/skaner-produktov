@@ -239,7 +239,7 @@ export default function App() {
               {photoDraft.mode === 'package' && <button className="ocr-primary" type="button" disabled={ocrBusy} onClick={() => void readLabel()}>
                 {ocrBusy ? 'Распознаём…' : 'Прочитать на телефоне'} <ScanLine size={16}/>
               </button>
-              {photoDraft.mode === 'package' && <button type="button" disabled={ocrBusy} onClick={manualFromPhoto}>Заполнить по этикетке вручную</button>}}
+              {photoDraft.mode === 'package' && <button type="button" disabled={ocrBusy} onClick={manualFromPhoto}>Заполнить по этикетке вручную</button>}
               <button type="button" disabled={ocrBusy} onClick={() => void sendPhoto()}>
                 {photoDraft.mode === 'package' ? 'Анализ через ИИ' : 'Определить через ИИ'} <ArrowRight size={16}/>
               </button>
