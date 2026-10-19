@@ -129,7 +129,7 @@ export function ProductNameFinder({ onCancel, onSelect }: Props) {
           void takePicture(event.target.files?.[0]);
           event.target.value = '';
         }}/>
-      <p>Наведи камеру на **крупное название и бренд**. Мелкий состав фотографировать не нужно.</p>
+      <p>Наведи камеру на <b>крупное название и бренд</b>. Мелкий состав фотографировать не нужно.</p>
       {status && <div className="name-finder-status" role="status">{status}</div>}
       {ocrText && <details className="name-finder-transcript"><summary>Что удалось прочитать с упаковки</summary><p>{ocrText.slice(0, 700)}</p></details>}
       <form onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void searchByName(query); }}>
@@ -144,7 +144,7 @@ export function ProductNameFinder({ onCancel, onSelect }: Props) {
     </div>
     {(searched || searchBusy) && <section className="name-finder-results" aria-label="Результаты поиска">
       <div className="name-finder-results-head"><h2>Похожие товары</h2><small>{searchBusy ? 'Поиск…' : results.length + ' вариантов'}</small></div>
-      <p>Проверь упаковку, название, бренд и вес. **Выбери только свой продукт.**</p>
+      <p>Проверь упаковку, название, бренд и вес. <b>Выбери только свой продукт.</b></p>
       {searchBusy && <div className="name-finder-skeleton"><div/><div/><div/></div>}
       {!searchBusy && results.map(item => <article className="name-finder-hit" key={item.code}>
         <div className="name-finder-hit-photo">{item.image ? <img alt="" src={item.image} loading="lazy"/> : <ImageIcon size={24}/>}</div>
