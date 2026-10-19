@@ -12,8 +12,8 @@ const FIELDS: { id: Key; label: string; unit: string; nutrient: keyof Nutriments
   { id: 'salt', label: 'Соль', unit: 'г', nutrient: 'salt_100g' },
 ];
 
-export function ProductEditor({ initial, onCancel, onSave }: {
-  initial: Product; onCancel: () => void; onSave: (product: Product) => void;
+export function ProductEditor({ initial, recognizedText, onCancel, onSave }: {
+  initial: Product; recognizedText?: string; onCancel: () => void; onSave: (product: Product) => void;
 }) {
   const [name, setName] = useState(initial.name.startsWith('Товар ') ? '' : initial.name);
   const [brand, setBrand] = useState(initial.brand);
@@ -55,6 +55,7 @@ export function ProductEditor({ initial, onCancel, onSave }: {
       <p>Штрихкод: <b>{initial.code}</b>. Перенесите сведения именно с этой этикетки, неизвестные поля оставьте пустыми.</p>
       {initial.aiNotes && <p className="editor-ocr-note">{initial.aiNotes}</p>}
       {initial.sourceNote && <p className="editor-ocr-note">{initial.sourceNote}</p>}
+      {recognizedText && <details className="editor-transcript" open><summary>Распознанный текст — сверьте с этикеткой</summary><p>Можно выделить и скопировать нужные значения в поля ниже. В этом тексте возможны ошибки.</p><textarea readOnly rows={5} value={recognizedText} aria-label="Текст, распознанный с этикетки" /></details>}
       <form onSubmit={save}>
         <label className="editor-label">Название продукта<input required value={name} onChange={e => setName(e.target.value)} placeholder="Например, морс клюквенный" /></label>
         <div className="editor-two">
