@@ -14,9 +14,6 @@ export interface ClearExplanation {
   possibleTraces: string[];
 }
 
-function includesAny(value: string, fragments: string[]): boolean {
-  return fragments.some(fragment => value.includes(fragment));
-}
 function labels(tags: string[]): string[] {
   const joined = tags.join(' ').toLowerCase();
   const items: [string, string[]][] = [
@@ -54,7 +51,7 @@ export function explainProduct(product: Product): ClearExplanation {
   if (salt != null && salt > 1.5) add('Много соли', `По данным карточки — ${salt.toLocaleString('ru-RU')} г соли на 100 г. Учитывайте и другие солёные продукты за день.`, 'attention');
   else if (salt === null && /соль/i.test(recipe)) add('Соль указана в составе', 'Но точное количество на 100 г неизвестно, поэтому нельзя оценить, много её или мало.', 'neutral');
   if (sugar != null && sugar > 12.5) add('Повышенное содержание сахаров', `В карточке указано ${sugar.toLocaleString('ru-RU')} г на 100 г. Учтите размер порции.`, 'attention');
-  else if (sugar === null && /\bсахар[а-я]*\b/i.test(recipe)) add('Есть сахар', 'Он указан среди ингредиентов, но его количество на 100 г в каталоге неизвестно.', 'neutral');
+  else if (sugar === null && /сахар[а-я]*/i.test(recipe)) add('Есть сахар', 'Он указан среди ингредиентов, но его количество на 100 г в каталоге неизвестно.', 'neutral');
   if (product.additivesTags.length >= 5) add('Есть пищевые добавки', `В каталоге отмечено ${product.additivesTags.length} добавок. Не все они опасны; важно, какие именно используются и в каком количестве.`, 'neutral');
   if (protein != null && protein >= 10) add('Содержит белок', `В 100 г — ${protein.toLocaleString('ru-RU')} г белка. Но это не отменяет остальные особенности состава.`, 'positive');
   if (!points.length) add('Проверка пока неполная', 'По имеющимся данным нельзя уверенно описать плюсы и минусы. Сверьте состав и пищевую ценность с упаковкой.', 'neutral');
